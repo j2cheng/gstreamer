@@ -357,6 +357,9 @@ enum
   PROP_MAX_TS_OFFSET,
   PROP_DEFAULT_VERSION,
   PROP_BACKCHANNEL,
+ //CRESTRON CHANGE BEGIN
+  PROP_RTCP_DEST_IP,
+ //CRESTRON CHANGE END
   PROP_TEARDOWN_TIMEOUT,
   PROP_ONVIF_MODE,
   PROP_ONVIF_RATE_CONTROL,
@@ -471,6 +474,9 @@ static GstFlowReturn gst_rtspsrc_push_backchannel_buffer (GstRTSPSrc * src,
 static GstFlowReturn gst_rtspsrc_push_backchannel_sample (GstRTSPSrc * src,
     guint id, GstSample * sample);
 
+//CRESTRON CHANGE BEGIN
+static gboolean gst_rtspsrc_rtcp_set_ip (GstURIHandler * handler,const gchar * uri);
+//CRESTRON CHANGE END
 typedef struct
 {
   guint8 pt;
@@ -600,6 +606,13 @@ gst_rtspsrc_class_init (GstRTSPSrcClass * klass)
       g_param_spec_string ("location", "RTSP Location",
           "Location of the RTSP url to read",
           DEFAULT_LOCATION, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  //CRESTRON CHANGE BEGIN
+  g_object_class_install_property (gobject_class, PROP_RTCP_DEST_IP,
+      g_param_spec_string ("rtcp-destination-ip", "RTCP destination IP",
+          "RTCP destination IP",
+          DEFAULT_LOCATION, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  //CRESTRON CHANGE END
 
   g_object_class_install_property (gobject_class, PROP_PROTOCOLS,
       g_param_spec_flags ("protocols", "Protocols",
@@ -1476,6 +1489,9 @@ static void
 gst_rtspsrc_init (GstRTSPSrc * src)
 {
   src->conninfo.location = g_strdup (DEFAULT_LOCATION);
+//CRESTRON CHANGE BEGIN
+  src->rtcp_dest_ip = g_strdup (DEFAULT_LOCATION);
+//CRESTRON CHANGE END
   src->protocols = DEFAULT_PROTOCOLS;
   src->debug = DEFAULT_DEBUG;
   src->retry = DEFAULT_RETRY;
@@ -1577,7 +1593,9 @@ gst_rtspsrc_finalize (GObject * object)
   g_free (rtspsrc->user_pw);
   g_free (rtspsrc->multi_iface);
   g_free (rtspsrc->user_agent);
-
+//CRESTRON CHANGE BEGIN
+  g_free (rtspsrc->rtcp_dest_ip);
+//CRESTRON CHANGE END
   if (rtspsrc->sdp) {
     gst_sdp_message_free (rtspsrc->sdp);
     rtspsrc->sdp = NULL;
@@ -1701,6 +1719,13 @@ gst_rtspsrc_set_property (GObject * object, guint prop_id, const GValue * value,
       gst_rtspsrc_uri_set_uri (GST_URI_HANDLER (rtspsrc),
           g_value_get_string (value), NULL);
       break;
+
+//CRESTRON CHANGE BEGIN
+    case PROP_RTCP_DEST_IP:
+      gst_rtspsrc_rtcp_set_ip (GST_URI_HANDLER (rtspsrc),g_value_get_string (value));
+      break;
+//CRESTRON CHANGE END
+
     case PROP_PROTOCOLS:
       rtspsrc->protocols = g_value_get_flags (value);
       break;
@@ -1885,6 +1910,13 @@ gst_rtspsrc_get_property (GObject * object, guint prop_id, GValue * value,
     case PROP_LOCATION:
       g_value_set_string (value, rtspsrc->conninfo.location);
       break;
+
+//CRESTRON CHANGE BEGIN
+    case PROP_RTCP_DEST_IP:
+      g_value_set_string (value, rtspsrc->rtcp_dest_ip);
+      break;
+//CRESTRON CHANGE END
+
     case PROP_PROTOCOLS:
       g_value_set_flags (value, rtspsrc->protocols);
       break;
@@ -4239,7 +4271,10 @@ gst_rtspsrc_stream_configure_manager (GstRTSPSrc * src, GstRTSPStream * stream,
         GST_INFO_OBJECT (src, "configure bandwidth in session %p", rtpsession);
 
         stream->session = rtpsession;
-
+//CRESTRON CHANGE BEGIN
+        //note stream->default_pt is the first payload type in sdp file
+        g_object_set (rtpsession, "default-pt", stream->default_pt, NULL);
+//CRESTRON CHANGE END
         if (stream->as_bandwidth != -1) {
           GST_INFO_OBJECT (src, "setting AS: %f",
               (gdouble) (stream->as_bandwidth * 1000));
@@ -4454,7 +4489,14 @@ gst_rtspsrc_get_transport_info (GstRTSPSrc * src, GstRTSPStream * stream,
     if (destination) {
       /* first take the source, then the endpoint to figure out where to send
        * the RTCP. */
-      if (!(*destination = transport->source)) {
+//CRESTRON CHANGE BEGIN
+      if(src->rtcp_dest_ip)
+      {
+    	  *destination = src->rtcp_dest_ip;
+    	  GST_DEBUG_OBJECT (src, "using rtcp ip:%s",src->rtcp_dest_ip);
+      }
+//CRESTRON CHANGE END
+      else if (!(*destination = transport->source)) {
         if (src->conninfo.connection)
           *destination = gst_rtsp_connection_get_ip (src->conninfo.connection);
         else if (stream->conninfo.connection)
@@ -9135,7 +9177,9 @@ gst_rtspsrc_pause (GstRTSPSrc * src, gboolean async)
   if ((res = gst_rtspsrc_ensure_open (src, async)) < 0)
     goto open_failed;
 
-  if (!(src->methods & GST_RTSP_PAUSE))
+//CRESTRON BEGIN
+//  if (!(src->methods & GST_RTSP_PAUSE))
+//CRESTRON END
     goto not_supported;
 
   if (src->state == GST_RTSP_STATE_READY)
@@ -9730,6 +9774,22 @@ parse_error:
     return FALSE;
   }
 }
+//CRESTRON CHANGE BEGIN
+static gboolean
+gst_rtspsrc_rtcp_set_ip(GstURIHandler * handler,const gchar * uri)
+{
+	GstRTSPSrc *src;
+
+	src = GST_RTSPSRC (handler);
+
+	GST_DEBUG_OBJECT (src, "configuring rtcp dest ip");
+	g_free (src->rtcp_dest_ip);
+
+	src->rtcp_dest_ip = g_strdup (uri);
+
+	return TRUE;
+}
+//CRESTRON CHANGE END
 
 static void
 gst_rtspsrc_uri_handler_init (gpointer g_iface, gpointer iface_data)

@@ -324,7 +324,9 @@ struct _GstRTSPSrc {
 
   GstRTSPVersion default_version;
   GstRTSPVersion version;
-
+  //CRESTRON CHANGE BEGIN
+  gchar           *rtcp_dest_ip;
+  //CRESTRON CHANGE END
   GstEvent *initial_seek;
 
   guint group_id;

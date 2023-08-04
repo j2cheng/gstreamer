@@ -223,6 +223,7 @@ enum
 #define DEFAULT_RTP_PROFILE          GST_RTP_PROFILE_AVP
 #define DEFAULT_NTP_TIME_SOURCE      GST_RTP_NTP_TIME_SOURCE_NTP
 #define DEFAULT_RTCP_SYNC_SEND_TIME  TRUE
+#define DEFAULT_UNASSIGNED_PT        G_MAXINT16//Crestron change: payload type can only be 8 bit
 #define DEFAULT_UPDATE_NTP64_HEADER_EXT  TRUE
 
 enum
@@ -245,6 +246,7 @@ enum
   PROP_TWCC_STATS,
   PROP_RTP_PROFILE,
   PROP_NTP_TIME_SOURCE,
+  PROP_DEFAULT_PT,//CRESTRON CHANGE
   PROP_RTCP_SYNC_SEND_TIME,
   PROP_UPDATE_NTP64_HEADER_EXT
 };
@@ -828,6 +830,13 @@ gst_rtp_session_class_init (GstRtpSessionClass * klass)
           DEFAULT_UPDATE_NTP64_HEADER_EXT,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+//CRESTRON CHANGE BEGIN
+  g_object_class_install_property (gobject_class, PROP_DEFAULT_PT,
+          g_param_spec_uint ("default-pt", "default payload type",
+              "The payload of the RTP session",
+              0, G_MAXINT16, DEFAULT_UNASSIGNED_PT,
+              G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+//CRESTRON CHANGE END
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_rtp_session_change_state);
   gstelement_class->request_new_pad =
@@ -1004,6 +1013,11 @@ gst_rtp_session_set_property (GObject * object, guint prop_id,
       g_object_set_property (G_OBJECT (priv->session),
           "update-ntp64-header-ext", value);
       break;
+//CRESTRON CHANGE BEGIN
+    case PROP_DEFAULT_PT:
+      g_object_set_property (G_OBJECT (priv->session), "default-pt", value);
+      break;
+//CRESTRON CHANGE END
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
       break;

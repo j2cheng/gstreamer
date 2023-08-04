@@ -79,6 +79,7 @@ enum
 #define DEFAULT_RTP_PROFILE          GST_RTP_PROFILE_AVP
 #define DEFAULT_RTCP_REDUCED_SIZE    FALSE
 #define DEFAULT_RTCP_DISABLE_SR_TIMESTAMP FALSE
+#define DEFAULT_UNASSIGNED_PT        G_MAXINT16//Crestron change: payload type can only be 8 bit
 #define DEFAULT_FAVOR_NEW            FALSE
 #define DEFAULT_TWCC_FEEDBACK_INTERVAL GST_CLOCK_TIME_NONE
 #define DEFAULT_UPDATE_NTP64_HEADER_EXT TRUE
@@ -108,6 +109,7 @@ enum
   PROP_RTP_PROFILE,
   PROP_RTCP_REDUCED_SIZE,
   PROP_RTCP_DISABLE_SR_TIMESTAMP,
+  PROP_DEFAULT_PT,   //CRESTRON CHANGE
   PROP_TWCC_FEEDBACK_INTERVAL,
   PROP_UPDATE_NTP64_HEADER_EXT,
   PROP_LAST,
@@ -622,12 +624,22 @@ rtp_session_class_init (RTPSessionClass * klass)
    *
    * Since: 1.16
    */
+#if 0
   properties[PROP_RTCP_DISABLE_SR_TIMESTAMP] =
       g_param_spec_boolean ("disable-sr-timestamp",
       "Disable Sender Report Timestamp",
       "Whether sender reports should be timestamped",
       DEFAULT_RTCP_DISABLE_SR_TIMESTAMP,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+#endif
+  //CRESTRON CHANGE BEGIN
+  properties[PROP_DEFAULT_PT] =
+      g_param_spec_uint ("default-pt",
+                         "default payload type",
+                         "The payload of the RTP session",
+                         0, G_MAXINT16, DEFAULT_UNASSIGNED_PT,
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  //CRESTRON CHANGE END
 
   /**
    * RTPSession:twcc-feedback-interval:
@@ -700,6 +712,9 @@ rtp_session_init (RTPSession * sess)
   sess->rtcp_bandwidth = DEFAULT_RTCP_FRACTION;
   sess->rtcp_rr_bandwidth = DEFAULT_RTCP_RR_BANDWIDTH;
   sess->rtcp_rs_bandwidth = DEFAULT_RTCP_RS_BANDWIDTH;
+  //CRESTRON CHANGE BEGIN
+  sess->default_pt = DEFAULT_UNASSIGNED_PT;
+  //CRESTRON CHANGE END
 
   /* default UDP header length */
   sess->header_len = UDP_IP_HEADER_OVERHEAD;
@@ -940,6 +955,11 @@ rtp_session_set_property (GObject * object, guint prop_id,
     case PROP_RTCP_REDUCED_SIZE:
       sess->reduced_size_rtcp = g_value_get_boolean (value);
       break;
+//CRESTRON CHANGE BEGIN
+    case PROP_DEFAULT_PT:
+      sess->default_pt = g_value_get_uint (value);
+      break;
+//CRESTRON CHANGE END
     case PROP_RTCP_DISABLE_SR_TIMESTAMP:
       sess->timestamp_sender_reports = !g_value_get_boolean (value);
       break;
@@ -2355,8 +2375,24 @@ rtp_session_process_rtp (RTPSession * sess, GstBuffer * buffer,
   if (created)
     on_new_ssrc (sess, source);
 
-  /* let source process the packet */
-  result = rtp_source_process_rtp (source, &pinfo);
+  //CRESTRON CHANGE BEGIN
+  if( pinfo.pt == sess->default_pt)
+  {
+      /* let source process the packet */
+      result = rtp_source_process_rtp (source, &pinfo);
+  }
+  //accept only the first PT if it is not set by rtspsrc
+  else if(sess->default_pt == DEFAULT_UNASSIGNED_PT)
+  {
+      sess->default_pt = pinfo.pt;
+      result = rtp_source_process_rtp (source, &pinfo);
+  }
+  else
+  {
+      /*payload type other than specified in sdp*/
+      result = GST_FLOW_OK;
+  }
+  //CRESTRON CHANGE END
   process_twcc_packet (sess, &pinfo);
 
   /* source became active */

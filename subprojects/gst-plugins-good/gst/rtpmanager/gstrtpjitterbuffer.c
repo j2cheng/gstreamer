@@ -3093,6 +3093,10 @@ _get_inband_ntp_time (GstRtpJitterBuffer * jitterbuffer, GstRTPBuffer * rtp)
   return ntpnstime;
 }
 
+//CRESTRON BEGIN
+  static GQuark qk_domain;
+//CRESTRON END
+
 static GstFlowReturn
 gst_rtp_jitter_buffer_chain (GstPad * pad, GstObject * parent,
     GstBuffer * buffer)
@@ -3120,7 +3124,10 @@ gst_rtp_jitter_buffer_chain (GstPad * pad, GstObject * parent,
   gint32 packet_rate, max_dropout, max_misorder;
   RtpTimer *timer = NULL;
   gboolean is_rtx;
-
+  //CRESTRON BEGIN
+  GstMessage *message;
+  GError *warning = NULL;
+  //CRESTRON END
   jitterbuffer = GST_RTP_JITTER_BUFFER_CAST (parent);
 
   priv = jitterbuffer->priv;
@@ -3231,11 +3238,34 @@ gst_rtp_jitter_buffer_chain (GstPad * pad, GstObject * parent,
     gap = gst_rtp_buffer_compare_seqnum (priv->seqnum_base, seqnum);
 
     if (gap < 0) {
-      GST_DEBUG_OBJECT (jitterbuffer,
-          "packet seqnum #%d before seqnum-base #%d", seqnum,
-          priv->seqnum_base);
-      gst_buffer_unref (buffer);
-      goto finished;
+    	//CRESTRON BEGIN
+//      GST_DEBUG_OBJECT (jitterbuffer,
+//          "packet seqnum #%d before seqnum-base #%d", seqnum,
+//          priv->seqnum_base);
+//      gst_buffer_unref (buffer);
+//      goto finished;
+        qk_domain = g_quark_from_static_string ("crestron");
+        warning = g_error_new (qk_domain, 10, "Invalid RTP packet sequence number. Detected: %d is less than base sequence number: %d", seqnum,
+    			priv->seqnum_base);
+        if (warning)
+        {
+			message = gst_message_new_warning (GST_OBJECT_CAST (jitterbuffer), warning, NULL);
+			if (message)
+			{
+				if((GST_MESSAGE_TYPE(message) == GST_MESSAGE_WARNING) && (GST_MESSAGE_SRC (message) != NULL))
+				{
+					gst_element_post_message (GST_ELEMENT_CAST (jitterbuffer), message);
+				}
+			}
+
+			g_error_free (warning);
+        }
+
+        GST_WARNING_OBJECT (jitterbuffer,
+            "packet seqnum #%d before seqnum-base #%d. Resetting base to current sequence number.", seqnum,
+            priv->seqnum_base);
+        priv->seqnum_base = seqnum;
+        //CRESTRON END
     } else if (gap > 16384) {
       /* From now on don't compare against the seqnum base anymore as
        * at some point in the future we will wrap around and also that

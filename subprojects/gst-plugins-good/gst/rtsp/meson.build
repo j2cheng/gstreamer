@@ -6,6 +6,10 @@ rtsp_sources = [
   'gstrtspext.c',
 ]
 
+install_headers(
+  ['gstrtspsrc.h', 'gstrtspext.h', 'gstrtpdec.h'],
+  subdir : 'gstreamer-1.0/gst/rtsp/')
+
 gstrtsp = library('gstrtsp',
   rtsp_sources,
   c_args : gst_plugins_good_args,
