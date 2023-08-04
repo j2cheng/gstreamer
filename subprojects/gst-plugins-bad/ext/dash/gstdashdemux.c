@@ -1054,6 +1054,7 @@ gst_dash_demux_process_manifest (GstAdaptiveDemux * demux, GstBuffer * buf)
     if (gst_mpd_client_parse (dashdemux->client, manifest, mapinfo.size)) {
       if (gst_mpd_client_setup_media_presentation (dashdemux->client, 0, 0,
               NULL)) {
+        GST_DEBUG_OBJECT (demux, "setup_media_presentation SUCCESS");
         ret = TRUE;
       } else {
         GST_ELEMENT_ERROR (demux, STREAM, DECODE,
@@ -2267,6 +2268,9 @@ gst_dash_demux_stream_select_bitrate (GstAdaptiveDemuxStream * stream,
   /* if no representation has the required bandwidth, take the lowest one */
   if (new_index == -1)
     new_index = gst_mpd_client_get_rep_idx_with_min_bandwidth (rep_list);
+
+  GST_DEBUG_OBJECT (stream->pad, "dashdemux: new_index= %d, representation_idx= %d",
+                   new_index, active_stream->representation_idx);//Crestron Change
 
   if (new_index != active_stream->representation_idx) {
     GstMPDRepresentationNode *rep = g_list_nth_data (rep_list, new_index);

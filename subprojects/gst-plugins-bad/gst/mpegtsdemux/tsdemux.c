@@ -73,7 +73,7 @@
 #define GST_FLOW_REWINDING GST_FLOW_CUSTOM_ERROR
 
 /* latency in msecs */
-#define DEFAULT_LATENCY (700)
+#define DEFAULT_LATENCY (125)
 
 /* Limit PES packet collection to a maximum of 32MB
  * which is more than large enough to support an H264 frame at
@@ -94,6 +94,8 @@ static GQuark QUARK_OPCR;
 static GQuark QUARK_PTS;
 static GQuark QUARK_DTS;
 static GQuark QUARK_OFFSET;
+
+static guint gst_postprocess_signal = 0; //Crestron Change
 
 typedef enum
 {
@@ -227,6 +229,7 @@ struct _TSDemuxStream
   TSDemuxH264ParsingInfos h264infos;
   TSDemuxJP2KParsingInfos jp2kInfos;
   TSDemuxADTSParsingInfos atdsInfos;
+  guint8 private_data[16];
 };
 
 #define VIDEO_CAPS \
@@ -302,6 +305,7 @@ enum
   PROP_EMIT_STATS,
   PROP_LATENCY,
   PROP_SEND_SCTE35_EVENTS,
+  PROP_PACKETIZER_PCR_DISCONT_THRESHOLD,
   /* FILL ME */
 };
 
@@ -435,6 +439,18 @@ gst_ts_demux_class_init (GstTSDemuxClass * klass)
           G_MAXINT, DEFAULT_LATENCY,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
+  // Crestron Change begin //
+  gst_postprocess_signal =
+        g_signal_new ("post-process", G_TYPE_FROM_CLASS (klass), 0,
+        0, NULL, NULL, g_cclosure_marshal_generic, G_TYPE_NONE, 3,
+        G_TYPE_POINTER, G_TYPE_POINTER, G_TYPE_UINT);
+
+  g_object_class_install_property (gobject_class, PROP_PACKETIZER_PCR_DISCONT_THRESHOLD,
+        g_param_spec_int ("discont-threshold", "packetizer pcr discont threshold",
+            "pcr discont threshold to packetizer (0 to 100 seconds)", 0, 100,
+            1, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  // Crestron Change end //
+
   element_class = GST_ELEMENT_CLASS (klass);
   gst_element_class_add_pad_template (element_class,
       gst_static_pad_template_get (&video_template));
@@ -539,6 +555,11 @@ gst_ts_demux_set_property (GObject * object, guint prop_id,
     case PROP_LATENCY:
       demux->latency = g_value_get_int (value);
       break;
+    // Crestron Change begin //
+    case PROP_PACKETIZER_PCR_DISCONT_THRESHOLD:
+      mpegts_packetizer_set_pcr_discont_threshold(MPEG_TS_BASE_PACKETIZER (demux),g_value_get_int (value) * GST_SECOND);
+      break;
+    // Crestron Change end //
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
   }
@@ -563,6 +584,11 @@ gst_ts_demux_get_property (GObject * object, guint prop_id,
     case PROP_LATENCY:
       g_value_set_int (value, demux->latency);
       break;
+    // Crestron Change begin //
+    case PROP_PACKETIZER_PCR_DISCONT_THRESHOLD:
+    	g_value_set_int(value, MPEG_TS_BASE_PACKETIZER (demux)->pcr_discont_threshold / GST_SECOND);
+      break;
+    // Crestron Change end //
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
   }
@@ -2602,6 +2628,7 @@ gst_ts_demux_parse_pes_header (GstTSDemux * demux, TSDemuxStream * stream,
 {
   PESHeader header;
   PESParsingResult parseres;
+  guint8 *PES_private_data;	//Crestron Change
 
   GST_MEMDUMP ("Header buffer", data, MIN (length, 32));
 
@@ -2679,6 +2706,13 @@ gst_ts_demux_parse_pes_header (GstTSDemux * demux, TSDemuxStream * stream,
 
   g_assert (stream->data == NULL);
   stream->data = g_malloc (stream->allocated_size);
+
+  //Crestron change: Save private data in stuct
+  if (header.private_data)
+  {
+	  memcpy(&(stream->private_data[0]), header.private_data, 16);
+  }
+
   memcpy (stream->data, data, length);
   stream->current_size = length;
 

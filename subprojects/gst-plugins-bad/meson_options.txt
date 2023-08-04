@@ -68,6 +68,8 @@ option('videoparsers', type : 'feature', value : 'auto')
 option('videosignal', type : 'feature', value : 'auto')
 option('vmnc', type : 'feature', value : 'auto')
 option('y4m', type : 'feature', value : 'auto')
+option('uvcsink', type : 'feature', value : 'enabled')
+option('creststream', type : 'feature', value : 'enabled')
 
 # Feature options for libraries that need external deps
 option('opencv', type : 'feature', value : 'auto', description : 'OpenCV computer vision library support')

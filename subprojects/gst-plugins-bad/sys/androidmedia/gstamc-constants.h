@@ -114,6 +114,13 @@ enum
   COLOR_OMX_SEC_FormatNV12Tiled = 0x7fc00002,
   /* YV12: http://developer.android.com/reference/android/graphics/ImageFormat.html#YV12 */
   COLOR_FormatYV12 = 0x32315659,
+
+  // CRESTRON_CHANGE_BEGIN
+  /* Android NV12, but with stride 4096 */
+  COLOR_ANDROID_Format_NV12 = 0x100,
+  COLOR_QCOM_FormatYUV420SemiPlanar_X70 = 0x7fa30c06,
+  COLOR_QCOM_FormatYUV420SemiPlanar_X80 = 0x7fa30c06, //NV12
+  // CRESTRON_CHANGE_END
 };
 
 enum

@@ -74,6 +74,43 @@ struct _BufferIdentification
   guint64 timestamp;
 };
 
+// CRESTRON_CHANGE_BEGIN
+#define DEFAULT_MAX_FRAME_PUSH_DELAY  0
+
+//Note:12-7-2021, amcdec can be set to original decoder or
+//     decoder/sink combined. Default, it is set to decoder/sink combined.
+#define AMCDEC_IS_DEC_SINK_MIN                       0
+#define AMCDEC_IS_DEC_SINK_MAX                       1
+#define AMCDEC_IS_DEC_SINK_DEFAULT                   1
+#define AMCDEC_DEC_FRAMES_DROP_INTERVAL_DEFAULT      15
+
+//new propertyies ID
+enum
+{
+  ARG_0,
+  PROP_SURFACEWINDOW,
+  PROP_TS_OFFSET,
+  PROP_PUSH_DELAY_MAX,
+  PROP_DECODER_SINK_LATENCY,
+  PROP_USE_LEGACY_METHOD,
+  PROP_DEC_MAX_INPUT_FRAMES,
+  PROP_AMCDEC_IS_DEC_AND_SINK,
+  PROP_DEC_FRAMES_DROP_INTERVAL
+  //PROP_OTHER_,
+};
+
+static void gst_amc_video_dec_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec);
+static void gst_amc_video_dec_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec);
+
+static gboolean default_element_query (GstElement * element, GstQuery * query);
+
+static gboolean
+gst_amc_video_dec_send_event (GstElement * element, GstEvent * event);
+
+// CRESTRON_CHANGE_END
+
 struct gl_sync_result
 {
   gint refcount;
@@ -325,8 +362,11 @@ caps_to_mime (GstCaps * caps)
     return "video/x-vnd.on2.vp9";
   } else if (strcmp (name, "video/x-divx") == 0) {
     return "video/mp4v-es";
+  } else if (strcmp (name, "image/jpeg") == 0) {//Crestron added
+	//GST_ERROR("Crestron PEM image/jpeg --> video/mjpeg"); //Crestron added				  
+    return "video/mjpeg";                       //Crestron added
   }
-
+  
   return NULL;
 }
 
@@ -349,6 +389,36 @@ gst_amc_video_dec_base_init (gpointer g_class)
   amcvideodec_class->codec_info = codec_info;
 
   gst_amc_codec_info_to_caps (codec_info, &sink_caps, &src_caps);
+
+  // CRESTRON_CHANGE_BEGIN
+  if (codec_info->name)
+  {
+    GST_LOG("Crestron gst_amc_video_dec_base_init --> codec_info[0x%x],name[%s],is_encoder[%d]",
+              codec_info, codec_info->name, codec_info->is_encoder);
+  }//else
+
+  if (sink_caps)
+  {
+    GST_LOG("Crestron gst_amc_video_dec_base_init : sink_caps [%s]", (guchar *)gst_caps_to_string(sink_caps));
+  }
+  else
+  {
+    GST_LOG("Crestron gst_amc_video_dec_base_init : sink_caps is NULL");
+  }
+
+  if (src_caps)
+  {
+    GST_LOG("Crestron gst_amc_video_dec_base_init : src_caps [%s]", (guchar *)gst_caps_to_string(src_caps));
+  }
+  else
+  {
+    GST_LOG("Crestron gst_amc_video_dec_base_init : src_caps is NULL");
+  }  
+
+ #ifdef GST_CRESTRON_VERSION 
+  GST_DEBUG("Crestron gst_amc_video_dec_base_init : GST_CRESTRON_VERSION[%d]",GST_CRESTRON_VERSION);
+ #endif
+  //CRESTRON_CHANGE_BEGIN   
 
   all_src_caps =
       gst_caps_from_string ("video/x-raw(" GST_CAPS_FEATURE_MEMORY_GL_MEMORY
@@ -407,6 +477,86 @@ gst_amc_video_dec_class_init (GstAmcVideoDecClass * klass)
   videodec_class->decide_allocation =
       GST_DEBUG_FUNCPTR (gst_amc_video_dec_decide_allocation);
   videodec_class->src_query = GST_DEBUG_FUNCPTR (gst_amc_video_dec_src_query);
+
+  // CRESTRON_CHANGE_BEGIN
+  gobject_class->set_property = GST_DEBUG_FUNCPTR( gst_amc_video_dec_set_property);
+  gobject_class->get_property = GST_DEBUG_FUNCPTR( gst_amc_video_dec_get_property);
+
+  g_object_class_install_property (gobject_class,
+                                   PROP_SURFACEWINDOW,
+                                   g_param_spec_uint ("surface-window",
+                                                      "Surface window",
+                                                      "Surface window for decoder to render",
+                                                      0,
+                                                      G_MAXUINT,
+                                                      0,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class,
+                                   PROP_TS_OFFSET,
+                                   g_param_spec_int64 ("ts-offset",
+                                                      "TS offset",
+                                                      "Time stamp offset",
+                                                      G_MININT64,
+                                                      G_MAXINT64,
+                                                      0,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class,
+                                   PROP_PUSH_DELAY_MAX,
+                                   g_param_spec_uint64 ("push-delay-max",
+                                                      "Push delay max",
+                                                      "Maximum time (ns) to wait for downstream to be ready for frame before dropping. 0 = disable",
+                                                      0,
+                                                      G_MAXUINT64,
+                                                      DEFAULT_MAX_FRAME_PUSH_DELAY,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class,
+                                  PROP_DECODER_SINK_LATENCY,
+                                  g_param_spec_uint64 ("amcdec-latency",
+                                                      "AMCDecoder sink latency",
+                                                      "Decoder used as sink, latency (ns).",
+                                                      0,
+                                                      G_MAXUINT64,
+                                                      0,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class,
+                                   PROP_USE_LEGACY_METHOD,
+                                   g_param_spec_boolean ("use-legacy-method",
+                                                      "Use legacy method",
+                                                      "Use legacy version of Crestron plugin if set to TRUE. Default = FALSE.",
+                                                      FALSE,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  g_object_class_install_property (gobject_class,
+                                   PROP_DEC_MAX_INPUT_FRAMES,
+                                   g_param_spec_uint ("dec-max-input-frames",
+                                                      "Dec max input frames",
+                                                      "Drop frame if Dec max input frames is set(1-100) and match. Default = 0, disabled.",
+                                                      0,
+                                                      100,
+                                                      0,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+
+  g_object_class_install_property (gobject_class,
+                                   PROP_AMCDEC_IS_DEC_AND_SINK,
+                                   g_param_spec_uint ("amcdec-is-dec-and-sink",
+                                                      "Dec is decoder and sink",
+                                                      "Dec is decoder and also act like a sink. Default = 1, decoder and sink combined.",
+                                                      AMCDEC_IS_DEC_SINK_MIN,
+                                                      AMCDEC_IS_DEC_SINK_MAX,
+                                                      AMCDEC_IS_DEC_SINK_DEFAULT,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+
+  g_object_class_install_property (gobject_class,
+                                   PROP_DEC_FRAMES_DROP_INTERVAL,
+                                   g_param_spec_uint ("dec-frames-drop-interval",
+                                                      "Dec frames drop interval",
+                                                      "Drop decoder output frame if Dec frames drop interval is set(1-60). Default = every 15 frames.",
+                                                      1,
+                                                      60,
+													  AMCDEC_DEC_FRAMES_DROP_INTERVAL_DEFAULT,
+                                                      G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
+  // CRESTRON_CHANGE_END
 }
 
 static void
@@ -422,6 +572,24 @@ gst_amc_video_dec_init (GstAmcVideoDec * self)
   g_cond_init (&self->gl_cond);
 
   self->gl_queue = g_queue_new ();
+  //CRESTRON_CHANGE_BEGIN
+  self->push_delay_max = DEFAULT_MAX_FRAME_PUSH_DELAY;
+  GST_DEBUG_OBJECT (self, "set push_delay_max to [%llu]", self->push_delay_max);
+
+  self->have_latency = FALSE;
+  self->use_legacy_method = FALSE;
+  GST_DEBUG_OBJECT (self, "set use_legacy_method to [%d]", self->use_legacy_method);
+  GstAmcVideoDecClass *klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
+  GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
+  element_class->query = NULL;
+  self->amcdec_max_input_frames = 0;
+
+  //decoder also acting as sink(need surface), default is true
+  self->amcdec_is_dec_and_sink  = AMCDEC_IS_DEC_SINK_DEFAULT;
+  GST_DEBUG_OBJECT (self, "set default amcdec_is_dec_and_sink to [%d]", self->amcdec_is_dec_and_sink);
+  self->dec_frames_drop_interval  = AMCDEC_DEC_FRAMES_DROP_INTERVAL_DEFAULT;
+  GST_DEBUG_OBJECT (self, "set default dec_frames_drop_interval to [%d]", self->dec_frames_drop_interval);
+  //CRESTRON_CHANGE_END
 }
 
 static gboolean
@@ -442,6 +610,15 @@ gst_amc_video_dec_open (GstVideoDecoder * decoder)
 
   self->started = FALSE;
   self->flushing = TRUE;
+
+  // CRESTRON_CHANGE_BEGIN
+  //self->codec->surface = self->surface_window_id;  
+  self->deq_buf_timeout_counter = 0;
+
+  //Note: following properties should be set by now.
+  GST_DEBUG_OBJECT (self, "Opening decoder: surface_window_id[0x%x],amcdec_is_dec_and_sink[%d]",
+                    self->surface_window_id,self->amcdec_is_dec_and_sink);
+  // CRESTRON_CHANGE_END
 
   GST_DEBUG_OBJECT (self, "Opened decoder");
 
@@ -586,8 +763,24 @@ gst_amc_video_dec_change_state (GstElement * element, GstStateChange transition)
       self->downstream_flow_ret = GST_FLOW_OK;
       self->draining = FALSE;
       self->started = FALSE;
+
+      //// CRESTRON CHANGE BEGIN ////
+      if(self->amcdec_is_dec_and_sink)
+      {
+        //if this is also sink
+        self->have_latency = TRUE;
+      }//else
+      //// CRESTRON CHANGE END ////
+
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
+//// CRESTRON CHANGE BEGIN ////
+      // Added because sinks should handle pause state if this is also sink
+      if(self->amcdec_is_dec_and_sink)
+      {
+        self->started = TRUE;
+      }//else
+//// CRESTRON CHANGE END ////
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       self->flushing = TRUE;
@@ -615,6 +808,13 @@ gst_amc_video_dec_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
+//// CRESTRON CHANGE BEGIN ////
+      // Added because sinks should handle pause state if this is also sink
+      if(self->amcdec_is_dec_and_sink)
+      {
+        self->started = FALSE;
+      }//else
+//// CRESTRON CHANGE END ////
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       self->downstream_flow_ret = GST_FLOW_FLUSHING;
@@ -700,8 +900,8 @@ _find_nearest_frame (GstAmcVideoDec * self, GstClockTime reference_timestamp)
   }
 
   if (finish_frames) {
-    g_warning ("%s: Too old frames, bug in decoder -- please file a bug",
-        GST_ELEMENT_NAME (self));
+      GST_WARNING_OBJECT (self,"%s: Too old frames, bug in decoder -- please file a bug",
+        GST_ELEMENT_NAME (self));// CRESTRON_CHANGE
     for (l = finish_frames; l; l = l->next) {
       gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), l->data);
     }
@@ -827,12 +1027,33 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     goto out;
   }
 
+  //CRESTRON_BEGIN
+  //1080: CODEC query returns unexpected color format, and stride and slice-height are not found in the map by the CODEC.
+  //May be due to BSP for 1080 built with a newer version of Gstreamer (1.19 vs 1.16.2). Will workaround both issues for now.
+  if(color_format == COLOR_FormatAndroidOpaque)
+  {
+    GST_DEBUG_OBJECT (self, "Received unexpected color format[0x%x] from CODEC. Use color_format[0x%x]", color_format, COLOR_QCOM_FormatYUV420SemiPlanar_X80);
+    color_format = COLOR_QCOM_FormatYUV420SemiPlanar_X80;
+  }
+//CRESTRON_END
   if (!gst_amc_format_get_int (format, "stride", &stride, &err) ||
       !gst_amc_format_get_int (format, "slice-height", &slice_height, &err)) {
-    GST_ERROR_OBJECT (self, "Failed to get stride and slice-height: %s",
+    //CRESTRON_BEGIN
+    if ((strcmp (klass->codec_info->name, "OMX.qcom.video.decoder.avc") == 0) ||
+    (strcmp (klass->codec_info->name, "OMX.qcom.video.decoder.hevc") == 0))
+    {
+      stride = width;
+      slice_height = height+16;  //2 extra bytes is modelled after x70 qcom codec query.
+      GST_DEBUG_OBJECT (self, "CODEC query cannot find stride and or slice-height. Use stride[%d], slice-height[%d]", stride, slice_height);
+    }
+    else
+    {
+    //CRESTRON_END
+      GST_ERROR_OBJECT (self, "Failed to get stride and slice-height: %s",
         err->message);
-    g_clear_error (&err);
-    return FALSE;
+      g_clear_error (&err);
+      return FALSE;
+    }
   }
 
   self->format = gst_format;
@@ -1283,9 +1504,12 @@ gst_amc_video_dec_loop (GstAmcVideoDec * self)
 {
   GstVideoCodecFrame *frame;
   GstFlowReturn flow_ret = GST_FLOW_OK;
+  // CRESTRON_CHANGE_BEGIN
+  GstFlowReturn flow_ret2 = GST_FLOW_OK;
+  // CRESTRON_CHANGE_END
   GstClockTimeDiff deadline;
   gboolean is_eos;
-  GstAmcBuffer *buf;
+  GstAmcBuffer *buf = NULL;//CRESTRON_CHANGE
   GstAmcBufferInfo buffer_info;
   gint idx;
   GError *err = NULL;
@@ -1294,10 +1518,30 @@ gst_amc_video_dec_loop (GstAmcVideoDec * self)
   GST_VIDEO_DECODER_STREAM_LOCK (self);
 
 retry:
+
+//// CRESTRON CHANGE BEGIN ////
+// Added because sinks should handle pause state
+  if(self->amcdec_is_dec_and_sink)
+  {
+    if (self->flushing) {
+        g_clear_error (&err);
+        goto flushing;
+    }
+    else if (!self->started)
+    {
+        GST_DEBUG_OBJECT (self, "Crestron: state is not started, waiting for started state...");
+        g_usleep (G_USEC_PER_SEC >> 1);	// sleep for 500 ms
+        goto retry;    
+    }
+  }//else skip here
+
   /*if (self->input_state_changed) {
      idx = INFO_OUTPUT_FORMAT_CHANGED;
      } else { */
-  GST_DEBUG_OBJECT (self, "Waiting for available output buffer");
+  GST_DEBUG_OBJECT (self, "Waiting for available output buffer. is_dec_and_sink [%d], codec_config[%d]",
+                    self->amcdec_is_dec_and_sink,self->codec_config);   
+ //// CRESTRON CHANGE END ////
+  
   GST_VIDEO_DECODER_STREAM_UNLOCK (self);
   /* Wait at most 100ms here, some codecs don't fail dequeueing if
    * the codec is flushing, causing deadlocks during shutdown */
@@ -1306,6 +1550,13 @@ retry:
       &err);
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   /*} */
+
+  // CRESTRON_CHANGE_BEGIN
+  if(self->amcdec_is_dec_and_sink)
+  {
+    buffer_info.size = 0;
+  }//else skip here
+  // CRESTRON_CHANGE_END
 
   GST_DEBUG_OBJECT (self, "dequeueOutputBuffer() returned %d (0x%x)", idx, idx);
 
@@ -1347,7 +1598,15 @@ retry:
         goto retry;
       }
       case INFO_TRY_AGAIN_LATER:
-        GST_DEBUG_OBJECT (self, "Dequeueing output buffer timed out");
+        // CRESTRON_CHANGE_BEGIN
+        self->deq_buf_timeout_counter++;
+        if( (self->deq_buf_timeout_counter % 50) == 0 )        
+        {
+            GST_ELEMENT_WARNING (self, LIBRARY, FAILED, (NULL),
+                                ("Dequeuing output buffer timed out"));
+            GST_DEBUG_OBJECT (self, "Send time out warning:%d",self->deq_buf_timeout_counter);
+        }
+        // CRESTRON_CHANGE_END
         goto retry;
       case G_MININT:
         GST_ERROR_OBJECT (self, "Failure dequeueing output buffer");
@@ -1361,21 +1620,38 @@ retry:
   }
 
   GST_DEBUG_OBJECT (self,
-      "Got output buffer at index %d: offset %d size %d time %" G_GINT64_FORMAT
-      " flags 0x%08x", idx, buffer_info.offset, buffer_info.size,
-      buffer_info.presentation_time_us, buffer_info.flags);
+          "Got output buffer at index %d: offset %d size %d time %" G_GINT64_FORMAT
+          " flags 0x%08x", idx, buffer_info.offset, buffer_info.size,
+          buffer_info.presentation_time_us, buffer_info.flags);
+  //CRESTRON_CHANGE_BEGIN
+  if(!self->amcdec_is_dec_and_sink)
+  {
 
-  buf = gst_amc_codec_get_output_buffer (self->codec, idx, &err);
-  if (err) {
-    if (self->flushing) {
-      g_clear_error (&err);
-      goto flushing;
-    }
-    goto failed_to_get_output_buffer;
+      buf = gst_amc_codec_get_output_buffer (self->codec, idx, &err);
+      if (err) {
+          if (self->flushing) {
+              g_clear_error (&err);
+              goto flushing;
+          }
+          goto failed_to_get_output_buffer;
+      }
+      GST_DEBUG_OBJECT (self, "gst_amc_video_dec_loop: buf(0x%x)", buf);
+
+      if (self->codec_config != AMC_CODEC_CONFIG_WITH_SURFACE && !buf)
+          goto got_null_output_buffer;
   }
 
-  if (self->codec_config != AMC_CODEC_CONFIG_WITH_SURFACE && !buf)
-    goto got_null_output_buffer;
+  if(self->deq_buf_timeout_counter)
+  {
+      if(self->deq_buf_timeout_counter >= 50)
+      {
+          GST_ELEMENT_WARNING (self, LIBRARY, FAILED, (NULL),
+                              ("clear dec deq buf timed out"));
+          GST_DEBUG_OBJECT (self, "Send clear time out:%d",self->deq_buf_timeout_counter);
+      }
+      self->deq_buf_timeout_counter = 0;
+  }
+  // CRESTRON_CHANGE_END
 
   frame =
       _find_nearest_frame (self,
@@ -1550,7 +1826,18 @@ retry:
 
     flow_ret = gst_video_decoder_finish_frame (GST_VIDEO_DECODER (self), frame);
   } else if (frame != NULL) {
-    flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
+
+// CRESTRON_CHANGE_BEGIN
+    //Note: if dec is used as sink(it has a surface), this is the last element in the pipeline.
+    //if(self->amcdec_is_dec_and_sink)
+    //{
+    //  flow_ret2 = gst_video_decoder_finish_and_remove_frame(GST_VIDEO_DECODER (self), frame,self->ts_offset, self->push_delay_max, self->use_legacy_method);
+    //}
+    //else
+    {
+      flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
+    }
+// CRESTRON_CHANGE_END
   }
 
   if (buf) {
@@ -1559,7 +1846,16 @@ retry:
   }
 
   if (release_buffer) {
-    if (!gst_amc_codec_release_output_buffer (self->codec, idx, FALSE, &err)) {
+// CRESTRON_CHANGE_BEGIN
+    gboolean render = FALSE;
+
+    if(self->amcdec_is_dec_and_sink)
+    {
+      render = (flow_ret2 == GST_FLOW_OK);
+    }//else
+
+    if (!gst_amc_codec_release_output_buffer (self->codec, idx, render, &err)) {
+// CRESTRON_CHANGE_END
       if (self->flushing) {
         g_clear_error (&err);
         goto flushing;
@@ -1890,7 +2186,12 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
       GST_ELEMENT_WARNING_FROM_ERROR (self, err);
   }
 
+// CRESTRON_CHANGE_BEGIN
+  GST_DEBUG_OBJECT (self, "gst_amc_video_dec_set_format",self->amcdec_is_dec_and_sink);
+  //Note: if dec is used as sink(it has a surface), just skip the following block.
+  if(!self->amcdec_is_dec_and_sink)
   {
+// CRESTRON_CHANGE_END
     gboolean downstream_supports_gl = FALSE;
     GstVideoDecoder *decoder = GST_VIDEO_DECODER (self);
     GstPad *src_pad = GST_VIDEO_DECODER_SRC_PAD (decoder);
@@ -2116,6 +2417,20 @@ gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
   if (self->flushing)
     goto flushing;
 
+  // CRESTRON_CHANGE_BEGIN
+  //TODO: 12-8-2021 I don't think it is correct here .
+  if (self->downstream_flow_ret != GST_FLOW_OK)
+  {
+    GST_WARNING_OBJECT (self,"gst_amc_video_dec_handle_frame - self->downstream_flow_ret[0x%x]",
+                        self->downstream_flow_ret);
+  }//else
+
+  if(self->amcdec_is_dec_and_sink)
+  {
+    self->downstream_flow_ret = GST_FLOW_OK;//crestron change for x60
+  }//else
+  //CRESTRON_CHANGE_END
+
   if (self->downstream_flow_ret != GST_FLOW_OK)
     goto downstream_error;
 
@@ -2162,6 +2477,7 @@ gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
       goto flushing;
     }
 
+    self->downstream_flow_ret = GST_FLOW_OK;//crestron change for x60
     if (self->downstream_flow_ret != GST_FLOW_OK) {
       memset (&buffer_info, 0, sizeof (buffer_info));
       gst_amc_codec_queue_input_buffer (self->codec, idx, &buffer_info, &err);
@@ -2513,3 +2829,343 @@ gst_amc_video_dec_on_frame_available (GstAmcSurfaceTexture * texture,
   g_cond_broadcast (&self->gl_cond);
   g_mutex_unlock (&self->gl_lock);
 }
+
+// CRESTRON_CHANGE_BEGIN
+static void gst_amc_video_dec_get_property (GObject * object, guint prop_id,
+    GValue * value, GParamSpec * pspec)
+{
+    g_return_if_fail (GST_IS_AMC_VIDEO_DEC (object));
+
+    GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (object);
+    GST_DEBUG_OBJECT (self, "Crestron get_property:object[%p],prop_id[%d]",object,prop_id);
+
+    switch (prop_id)
+    {
+        case PROP_PUSH_DELAY_MAX:
+        {
+            g_value_set_uint64(value, self->push_delay_max);
+            break;
+        }
+        case PROP_TS_OFFSET:
+        {
+            g_value_set_int64(value, self->ts_offset);
+            break;
+        }
+        case PROP_DECODER_SINK_LATENCY:
+        {
+            g_value_set_uint64(value, self->latency);
+            break;
+        }
+        case PROP_USE_LEGACY_METHOD:
+        {
+            g_value_set_boolean(value, self->use_legacy_method);
+            GST_DEBUG_OBJECT (self, "get property use legacy method[%d]", self->use_legacy_method);
+            break;
+        }
+        case PROP_DEC_MAX_INPUT_FRAMES:
+        {
+            g_value_set_uint(value, self->amcdec_max_input_frames);
+            GST_DEBUG_OBJECT (self, "get property dec input max frames[%d]", self->amcdec_max_input_frames);
+            break;
+        }
+        case PROP_AMCDEC_IS_DEC_AND_SINK:
+        {
+            g_value_set_uint(value, self->amcdec_is_dec_and_sink);
+            GST_DEBUG_OBJECT (self, "get property amcdec_is_dec_and_sink[%d]", self->amcdec_is_dec_and_sink);
+            break;
+        }
+        case PROP_DEC_FRAMES_DROP_INTERVAL:
+        {
+            g_value_set_uint(value, self->dec_frames_drop_interval);
+            GST_DEBUG_OBJECT (self, "get property dec frames drop interval[%d]", self->dec_frames_drop_interval);
+            break;
+        }
+        default:
+        {
+          GST_DEBUG_OBJECT (self, "unknown property prop_id[%d]",prop_id);
+          break;
+        }
+    }
+
+    GST_DEBUG_OBJECT (self, "Done get_property:id[%d]",prop_id);
+}
+static void
+gst_amc_video_dec_set_property (GObject * object, guint prop_id,
+    const GValue * value, GParamSpec * pspec)
+{
+    g_return_if_fail (GST_IS_AMC_VIDEO_DEC (object));
+
+    GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (object);
+    GST_DEBUG_OBJECT (self, "Crestron set_property:object[%p],prop_id[%d]",object,prop_id);
+
+    switch (prop_id)
+    {
+        case PROP_SURFACEWINDOW:
+        {
+            self->surface_window_id = g_value_get_uint(value);
+            GST_DEBUG_OBJECT (self, "set surface_window_id[0x%x]",self->surface_window_id);
+            break;
+        }
+        case PROP_TS_OFFSET:
+        {
+            self->ts_offset = g_value_get_int64(value);
+            GST_DEBUG_OBJECT (self, "set ts_offset to: %lld",self->ts_offset);
+            break;
+        }
+        case PROP_PUSH_DELAY_MAX:
+        {
+            self->push_delay_max = g_value_get_uint64(value);
+            GST_DEBUG_OBJECT (self, "set frame push delay max[%llu]", self->push_delay_max);
+            break;
+        }
+        case PROP_USE_LEGACY_METHOD:
+        {
+            //Note: when amcdec_is_dec_and_sink is not set, we are using
+            //      original amcdec, so we should not set this property.
+            if(self->amcdec_is_dec_and_sink)
+            {
+                self->use_legacy_method = g_value_get_boolean(value);
+                GST_DEBUG_OBJECT (self, "set use legacy method[%d]", self->use_legacy_method);
+                GstAmcVideoDecClass *klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
+                GstElementClass *element_class = GST_ELEMENT_CLASS (klass);
+                GST_DEBUG_OBJECT (self, "enable querying, element_class->query = %p, default_element_query = %p",
+                GST_DEBUG_FUNCPTR (element_class->query), GST_DEBUG_FUNCPTR (default_element_query));
+                element_class->query = GST_DEBUG_FUNCPTR (default_element_query);
+                element_class->send_event = GST_DEBUG_FUNCPTR (gst_amc_video_dec_send_event);
+                GST_OBJECT_FLAG_SET (self, GST_ELEMENT_FLAG_SINK);
+            }
+            else
+            {
+                GST_DEBUG_OBJECT (self, "amcdec_is_dec_and_sink[%d], should not call this property", self->amcdec_is_dec_and_sink);
+            }
+
+           break;
+        }
+        case PROP_DEC_MAX_INPUT_FRAMES:
+        {
+            self->amcdec_max_input_frames = g_value_get_uint(value);
+            GST_DEBUG_OBJECT (self, "set dec_max_input_frames[%d]",self->amcdec_max_input_frames);
+
+            //gst_video_decoder_set_dec_max_input_frames(GST_VIDEO_DECODER (self),self->amcdec_max_input_frames,TRUE);
+            break;
+        }
+        case PROP_AMCDEC_IS_DEC_AND_SINK:
+        {
+            self->amcdec_is_dec_and_sink = g_value_get_uint(value);
+            GST_DEBUG_OBJECT (self, "set amcdec_is_dec_and_sink[%d]",self->amcdec_is_dec_and_sink);
+            
+            break;
+        }
+        case PROP_DEC_FRAMES_DROP_INTERVAL:
+        {
+            self->dec_frames_drop_interval = g_value_get_uint(value);
+            GST_DEBUG_OBJECT (self, "set dec_frames_drop_interval[%d]",self->dec_frames_drop_interval);
+
+            //gst_video_decoder_set_dec_frames_drop_interval(GST_VIDEO_DECODER (self),self->dec_frames_drop_interval,TRUE);
+            break;
+        }
+        default:
+            G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
+            break;
+    }
+    GST_DEBUG_OBJECT (self, "Done set_property:id[%d]",prop_id);
+}
+
+static gboolean
+default_element_query (GstElement * element, GstQuery * query)
+{
+    gboolean res = FALSE;
+
+    GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (element);
+
+    switch (GST_QUERY_TYPE (query))
+    {
+        case GST_QUERY_LATENCY:
+        {
+            {
+                gboolean live;
+                GstClockTime min_latency, max_latency;
+
+                GST_WARNING_OBJECT (self, "default_element_query GST_QUERY_LATENCY.");
+
+                res = gst_pad_peer_query (self->parent.sinkpad, query);
+                if (res)
+                {
+                  gst_query_parse_latency (query, &live, &min_latency, &max_latency);
+                  GST_DEBUG_OBJECT (self, "Peer qlatency: live %d, min %"
+                      GST_TIME_FORMAT " max %" GST_TIME_FORMAT, live,
+                      GST_TIME_ARGS (min_latency), GST_TIME_ARGS (max_latency));
+
+                  gst_query_set_latency (query, live, min_latency, max_latency);
+
+                  GST_WARNING_OBJECT (self, "default_element_query live[%d],min_latency[%d], max_latency[%d].",live,min_latency, max_latency);
+                }
+            }
+            break;
+        }
+
+        default:
+            res = gst_pad_peer_query (self->parent.sinkpad, query);
+
+            //GstPad *pad = GST_VIDEO_DECODER_SRC_PAD (self->parent);
+            //res = gst_pad_query_default (pad, GST_OBJECT (self), query);
+            break;
+    }
+
+    GST_WARNING_OBJECT (self, "query %s returns %d",
+                      GST_QUERY_TYPE_NAME (query), res);
+    return res;
+}
+
+/* send an event to our sinkpad peer. */
+static gboolean
+gst_amc_video_dec_send_event (GstElement * element, GstEvent * event)
+{
+  GstPad *pad;
+  GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (element);
+  gboolean forward, result = TRUE;
+
+  if (!self || !event)
+      return FALSE;
+
+  GST_OBJECT_LOCK (element);
+   /* get the pad */
+  pad = gst_object_ref (self->parent.sinkpad);
+  GST_OBJECT_UNLOCK (element);
+
+  /* only push UPSTREAM events upstream */
+  forward = GST_EVENT_IS_UPSTREAM (event);
+
+  GST_DEBUG_OBJECT (self, "handling event %p %" GST_PTR_FORMAT, event,
+      event);
+
+  switch (GST_EVENT_TYPE (event)) {
+    case GST_EVENT_LATENCY:
+    {
+      GstClockTime latency;
+
+      gst_event_parse_latency (event, &latency);
+
+      /* store the latency. We use this to adjust the running_time before syncing
+       * it to the clock. */
+      GST_OBJECT_LOCK (element);
+      self->latency = latency;
+
+      //TODO: fix this later
+      GstVideoDecoder * decoder = GST_VIDEO_DECODER (element);
+      //gst_video_decoder_set_latency_new(decoder,latency,FALSE);
+
+      if (!self->have_latency)
+        forward = FALSE;
+      GST_OBJECT_UNLOCK (element);
+      GST_DEBUG_OBJECT (self, "latency set to %" GST_TIME_FORMAT,
+          GST_TIME_ARGS (latency));
+
+      /*post latency updated message to app*/
+      gst_element_post_message (GST_ELEMENT_CAST (decoder),
+        gst_message_new_latency (GST_OBJECT_CAST (decoder)));
+
+      /* We forward this event so that all elements know about the global pipeline
+       * latency. This is interesting for an element when it wants to figure out
+       * when a particular piece of data will be rendered. */
+      break;
+    }
+    default:
+      break;
+  }
+
+  if (forward) {
+    GST_DEBUG_OBJECT (self, "sending event %p %" GST_PTR_FORMAT, event,
+        event);
+#if 0
+    /* Compensate for any instant-rate-change related running time offset
+     * between upstream and the internal running time of the sink */
+    if (basesink->priv->instant_rate_sync_seqnum != GST_SEQNUM_INVALID) {
+      GstClockTime now = GST_CLOCK_TIME_NONE;
+      GstClockTime actual_duration;
+      GstClockTime upstream_duration;
+      GstClockTimeDiff difference;
+      gboolean is_playing, negative_duration;
+
+      GST_OBJECT_LOCK (basesink);
+      is_playing = GST_STATE (basesink) == GST_STATE_PLAYING
+          && (GST_STATE_PENDING (basesink) == GST_STATE_VOID_PENDING ||
+          GST_STATE_PENDING (basesink) == GST_STATE_PLAYING);
+
+      if (is_playing) {
+        GstClockTime base_time, clock_time;
+        GstClock *clock;
+
+        base_time = GST_ELEMENT_CAST (basesink)->base_time;
+        clock = GST_ELEMENT_CLOCK (basesink);
+        GST_OBJECT_UNLOCK (basesink);
+
+        if (clock) {
+          clock_time = gst_clock_get_time (clock);
+          now = clock_time - base_time;
+        }
+      } else {
+        now = GST_ELEMENT_START_TIME (basesink);
+        GST_OBJECT_UNLOCK (basesink);
+      }
+
+      GST_DEBUG_OBJECT (basesink,
+          "Current internal running time %" GST_TIME_FORMAT
+          ", last internal running time %" GST_TIME_FORMAT, GST_TIME_ARGS (now),
+          GST_TIME_ARGS (basesink->priv->last_anchor_running_time));
+
+      if (now != GST_CLOCK_TIME_NONE) {
+        /* Calculate how much running time was spent since the last switch/segment
+         * in the "corrected upstream segment", our segment */
+        /* Due to rounding errors and other inaccuracies, it can happen
+         * that our calculated internal running time is before the upstream
+         * running time. We need to compensate for that */
+        if (now < basesink->priv->last_anchor_running_time) {
+          actual_duration = basesink->priv->last_anchor_running_time - now;
+          negative_duration = TRUE;
+        } else {
+          actual_duration = now - basesink->priv->last_anchor_running_time;
+          negative_duration = FALSE;
+        }
+
+        /* Transpose that duration (i.e. what upstream beliefs) */
+        upstream_duration =
+            (actual_duration * basesink->segment.rate) /
+            basesink->priv->upstream_segment.rate;
+
+        /* Add the difference to the previously accumulated correction */
+        if (negative_duration)
+          difference = upstream_duration - actual_duration;
+        else
+          difference = actual_duration - upstream_duration;
+
+        GST_DEBUG_OBJECT (basesink,
+            "Current instant rate correction offset. Actual duration %"
+            GST_TIME_FORMAT ", upstream duration %" GST_TIME_FORMAT
+            ", negative %d, difference %" GST_STIME_FORMAT ", current offset %"
+            GST_STIME_FORMAT, GST_TIME_ARGS (actual_duration),
+            GST_TIME_ARGS (upstream_duration), negative_duration,
+            GST_STIME_ARGS (difference),
+            GST_STIME_ARGS (basesink->priv->instant_rate_offset + difference));
+
+        difference = basesink->priv->instant_rate_offset + difference;
+
+        event = gst_event_make_writable (event);
+        gst_event_set_running_time_offset (event, -difference);
+      }
+    }
+#endif
+
+    result = gst_pad_push_event (pad, event);
+  } else {
+    /* not forwarded, unref the event */
+    gst_event_unref (event);
+  }
+
+  gst_object_unref (pad);
+
+  GST_DEBUG_OBJECT (self, "handled event: %d", result);
+
+  return result;
+}
+// CRESTRON_CHANGE_END

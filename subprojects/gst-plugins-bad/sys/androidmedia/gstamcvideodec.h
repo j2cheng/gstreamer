@@ -110,6 +110,23 @@ struct _GstAmcVideoDec
   guint gl_ready_frame_count;  /* n buffers ready for GL access */
   guint gl_released_frame_count;  /* n buffers released */
   GQueue *gl_queue;
+
+  // CRESTRON_CHANGE_BEGIN
+  guint surface_window_id;
+  gint64 ts_offset;
+  gint deq_buf_timeout_counter;
+  guint64 push_delay_max;
+
+  /* when we are prerolled and able to report latency */
+  gboolean have_latency;
+
+  guint64 latency;
+  gboolean use_legacy_method;
+  guint amcdec_max_input_frames;
+
+  guint amcdec_is_dec_and_sink;//decoder also acting as sink(need surface)
+  guint dec_frames_drop_interval;
+  // CRESTRON_CHANGE_END
 };
 
 struct _GstAmcVideoDecClass

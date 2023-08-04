@@ -1472,6 +1472,13 @@ calculate_skew (MpegTSPacketizer2 * packetizer,
       GST_TIME_ARGS (time), GST_TIME_ARGS (pcr->base_time),
       GST_TIME_ARGS (recv_diff), slope);
 
+  // Crestron Change begin //
+  GST_DEBUG ("delta %" GST_TIME_FORMAT ", skew %" GST_TIME_FORMAT
+      ", delta - skew: %" GST_TIME_FORMAT ", pcr_discont_threshold %" GST_TIME_FORMAT ,
+      GST_TIME_ARGS (delta), GST_TIME_ARGS (pcr->skew),GST_TIME_ARGS (delta - pcr->skew),
+      GST_TIME_ARGS (packetizer->pcr_discont_threshold));
+  // Crestron Change end //
+
   /* if the difference between the sender timeline and the receiver timeline
    * changed too quickly we have to resync because the server likely restarted
    * its timestamps. */

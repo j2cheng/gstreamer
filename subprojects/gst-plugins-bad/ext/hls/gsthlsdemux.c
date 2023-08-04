@@ -759,6 +759,24 @@ gst_hls_demux_set_current_variant (GstHLSDemux * hlsdemux,
 
 }
 
+//CRESTRON CHANGE BEGIN
+#if 0
+//TODO: gst_hls_demux_process_manifest() was changed to fix bug 132590. 
+//      We have to find out how to implemete it in current 1.14.4 relase!!!
+#if 0
+      GST_M3U8_CLIENT_LOCK (hlsdemux->client);
+      child = hlsdemux->client->main->current_variant->data;
+      GST_M3U8_CLIENT_UNLOCK (hlsdemux->client);
+#else
+      GList *maxtmp = gst_m3u8_client_get_playlist_for_bitrate (hlsdemux->client, 5000000);
+      GST_M3U8_CLIENT_LOCK (hlsdemux->client);
+      hlsdemux->client->main->current_variant =maxtmp;
+      GST_M3U8_CLIENT_UNLOCK (hlsdemux->client);
+      child = GST_M3U8 (maxtmp->data);
+#endif
+
+#endif
+//CRESTRON CHANGE END
 static gboolean
 gst_hls_demux_process_manifest (GstAdaptiveDemux * demux, GstBuffer * buf)
 {
@@ -906,6 +924,7 @@ gst_hls_demux_start_fragment (GstAdaptiveDemux * demux,
   const GstHLSKey *key;
   GstM3U8 *m3u8;
 
+  GST_DEBUG_OBJECT (demux, "hlsdemux: start fragment");//Crestron change
   gst_hls_demux_stream_clear_pending_data (hls_stream);
 
   /* Init the timestamp reader for this fragment */
@@ -1064,6 +1083,7 @@ gst_hls_demux_finish_fragment (GstAdaptiveDemux * demux,
   GstHLSDemuxStream *hls_stream = GST_HLS_DEMUX_STREAM_CAST (stream);   // FIXME: pass HlsStream into function
   GstFlowReturn ret = GST_FLOW_OK;
 
+  GST_DEBUG_OBJECT (demux, "hlsdemux: finish fragment");//Crestron change
   if (hls_stream->current_key)
     gst_hls_demux_stream_decrypt_end (hls_stream);
 
@@ -1321,6 +1341,7 @@ gst_hls_demux_select_bitrate (GstAdaptiveDemuxStream * stream, guint64 bitrate)
 
   gboolean changed = FALSE;
 
+  GST_DEBUG_OBJECT (demux, "hlsdemux: select_bitrate = %d", bitrate);//Crestron change
   GST_M3U8_CLIENT_LOCK (hlsdemux->client);
   if (hlsdemux->master == NULL || hlsdemux->master->is_simple) {
     GST_M3U8_CLIENT_UNLOCK (hlsdemux->client);
@@ -1336,8 +1357,10 @@ gst_hls_demux_select_bitrate (GstAdaptiveDemuxStream * stream, guint64 bitrate)
 
   gst_hls_demux_change_playlist (hlsdemux, bitrate / MAX (1.0,
           ABS (demux->segment.rate)), &changed);
-  if (changed)
+  if (changed){
+    GST_DEBUG_OBJECT (demux, "hlsdemux: change playlist ");//Crestron change
     gst_hls_demux_setup_streams (GST_ADAPTIVE_DEMUX_CAST (hlsdemux));
+  }
   return changed;
 }
 

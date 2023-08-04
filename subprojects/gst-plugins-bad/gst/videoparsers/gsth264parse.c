@@ -1938,12 +1938,18 @@ get_profile_string (GstH264SPS * sps)
       profile = "extended";
       break;
     case 100:
+    //CRESTRON_CHANGE_BEGIN
+    /*Force the decoder to treat constrained-high profile stream as high profile since some decoders
+      do not support constrained-high. Note: gstreamer 1.14 also implements profile = high only and was 
+      verified with a source stream from Windows miracast wifidirect (i.e. constrained-high, level 4).
+
       if (sps->constraint_set4_flag) {
         if (sps->constraint_set5_flag)
           profile = "constrained-high";
         else
           profile = "progressive-high";
-      } else
+      } else*/
+    //CRESTRON_CHANGE_END
         profile = "high";
       break;
     case 110:
@@ -1990,8 +1996,22 @@ get_profile_string (GstH264SPS * sps)
         profile = "scalable-high";
       break;
     default:
-      return NULL;
+      //CRESTRON_CHANGE_BEGIN
+      //return NULL;
+      break;
+      //CRESTRON_CHANGE_END
   }
+
+  //CRESTRON_CHANGE_BEGIN
+  if(profile)
+  {
+    GST_INFO ("get_profile_string(): profile = %s", profile);
+  }
+  else
+  {
+    GST_WARNING ("get_profile_string(): profile is NULL");
+  }
+  //CRESTRON_CHANGE_END
 
   return profile;
 }
