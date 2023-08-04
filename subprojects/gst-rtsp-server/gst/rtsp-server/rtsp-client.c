@@ -211,6 +211,11 @@ static gboolean pre_signal_accumulator (GSignalInvocationHint * ihint,
 
 G_DEFINE_TYPE_WITH_PRIVATE (GstRTSPClient, gst_rtsp_client, G_TYPE_OBJECT);
 
+//CRESTRON BEGIN
+static GstRTSPFilterResult remove_client_from_session (GstRTSPClient *client, GstRTSPSession
+*session, gpointer user_data);
+//CRESTRON END
+
 static void
 gst_rtsp_client_class_init (GstRTSPClientClass * klass)
 {
@@ -5011,6 +5016,16 @@ closed (GstRTSPWatch * watch, gpointer user_data)
 
   GST_INFO ("client %p: connection closed", client);
 
+//CRESTRON BEGIN
+  //Remove client from pool. This routine is required for clients that do
+  //not send TEARDOWN message.
+	GstRTSPSessionPool *pool = gst_rtsp_client_get_session_pool(client);
+	if(pool)
+	{
+		gst_rtsp_client_session_filter(client, remove_client_from_session, pool);
+	}
+//CRESTRON END
+
   if ((tunnelid = gst_rtsp_connection_get_tunnelid (priv->connection))) {
     g_mutex_lock (&tunnels_lock);
     /* remove from tunnelids */
@@ -5462,3 +5477,36 @@ restart:
 
   return result;
 }
+
+//CRESTRON BEGIN
+static GstRTSPFilterResult remove_client_from_session (GstRTSPClient *client, GstRTSPSession
+*session, gpointer user_data)
+{
+	GstRTSPSessionMedia  *sessmedia;
+	GstRTSPClientPrivate *priv = client->priv;
+	gboolean keep_session = FALSE;
+	GList   *walk, *next;
+
+	GList *sessionmedias = gst_rtsp_session_filter( session, NULL, NULL );
+
+	for( walk = sessionmedias; walk; walk = next )
+	{
+		sessmedia = walk->data;
+		next = g_list_next( walk );
+
+		keep_session |= gst_rtsp_session_release_media( session, sessmedia );
+
+		g_object_unref( sessmedia );
+		sessionmedias = g_list_delete_link( sessionmedias, walk );
+	}
+
+	if( !keep_session )
+	{
+	  //remove the session
+		GST_INFO ("remove_client_from_session: Remove session %p", session);
+		gst_rtsp_session_pool_remove( priv->session_pool, session );
+	}
+
+	return(GST_RTSP_FILTER_KEEP);
+}
+//CRESTRON END

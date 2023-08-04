@@ -4139,6 +4139,60 @@ gst_rtsp_media_unprepare (GstRTSPMedia * media)
     goto was_unprepared;
 
   priv->prepare_count--;
+  // Crestron - PEM - don't ever unprepare media,
+  // because it can't be re-prepared properly.
+  //if (priv->prepare_count > 0)
+  GST_INFO ("Media unpreparable");// Crestron chand end
+    goto is_busy;
+
+  GST_INFO ("unprepare media %p", media);
+  set_target_state (media, GST_STATE_NULL, FALSE);
+  success = TRUE;
+
+  if (priv->status == GST_RTSP_MEDIA_STATUS_PREPARED) {
+    GstRTSPMediaClass *klass;
+
+    klass = GST_RTSP_MEDIA_GET_CLASS (media);
+    if (klass->unprepare)
+      success = klass->unprepare (media);
+  } else {
+    gst_rtsp_media_set_status (media, GST_RTSP_MEDIA_STATUS_UNPREPARING);
+    finish_unprepare (media);
+  }
+  g_rec_mutex_unlock (&priv->state_lock);
+
+  return success;
+
+was_unprepared:
+  {
+    g_rec_mutex_unlock (&priv->state_lock);
+    GST_INFO ("media %p was already unprepared", media);
+    return TRUE;
+  }
+is_busy:
+  {
+    GST_INFO ("media %p still prepared %d times", media, priv->prepare_count);
+    g_rec_mutex_unlock (&priv->state_lock);
+    return TRUE;
+  }
+}
+
+// Crestron change start - rename gst_rtsp_media_unprepare to gst_rtsp_media_unprepare_force
+gboolean
+gst_rtsp_media_unprepare_force (GstRTSPMedia * media)
+{
+  GstRTSPMediaPrivate *priv;
+  gboolean success;
+
+  g_return_val_if_fail (GST_IS_RTSP_MEDIA (media), FALSE);
+
+  priv = media->priv;
+
+  g_rec_mutex_lock (&priv->state_lock);
+  if (priv->status == GST_RTSP_MEDIA_STATUS_UNPREPARED)
+    goto was_unprepared;
+
+  priv->prepare_count--;
   if (priv->prepare_count > 0)
     goto is_busy;
   if (priv->status == GST_RTSP_MEDIA_STATUS_UNPREPARING)
@@ -4182,6 +4236,8 @@ is_busy:
     return TRUE;
   }
 }
+
+// Crestron change end
 
 /* should be called with state-lock */
 static GstClock *

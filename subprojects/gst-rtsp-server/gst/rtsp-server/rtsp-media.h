@@ -202,6 +202,11 @@ GstRTSPMedia *        gst_rtsp_media_new              (GstElement *element);
 GST_RTSP_SERVER_API
 GstElement *          gst_rtsp_media_get_element      (GstRTSPMedia *media);
 
+// Crestron change start
+GST_RTSP_SERVER_API
+GstElement *          gst_rtsp_media_get_pipeline     (GstRTSPMedia * media); 
+// Crestron change end
+
 GST_RTSP_SERVER_API
 void                  gst_rtsp_media_take_pipeline    (GstRTSPMedia *media, GstPipeline *pipeline);
 
@@ -337,6 +342,10 @@ gboolean              gst_rtsp_media_prepare          (GstRTSPMedia *media, GstR
 GST_RTSP_SERVER_API
 gboolean              gst_rtsp_media_unprepare        (GstRTSPMedia *media);
 
+//Crestron change start
+GST_RTSP_SERVER_API
+gboolean              gst_rtsp_media_unprepare_force  (GstRTSPMedia *media);
+//Crestron change end
 GST_RTSP_SERVER_API
 void                  gst_rtsp_media_set_suspend_mode (GstRTSPMedia *media, GstRTSPSuspendMode mode);
 
