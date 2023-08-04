@@ -13,8 +13,17 @@ gst_tracers_sources = [
   'gstfactories.c'
 ]
 
+
 if gst_debug
-  gst_tracers_sources += ['gstlog.c']
+  gst_tracers_sources += ['gstlog.c',
+#CRESTRON_CHANGE_BEGIN
+  'gstframerate.c',
+  'gstperiodictracer.c',
+  'gstparser.c',
+  'gstsharktracer.c',
+  'gstcpuusage.c',
+  'gstcpuusagecompute.c',]
+#CRESTRON_CHANGE_END  
 endif
 
 if cdata.has('HAVE_GETRUSAGE')

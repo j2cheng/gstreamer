@@ -30,6 +30,12 @@
 #include "gststats.h"
 #include "gstleaks.h"
 #include "gstfactories.h"
+//CRESTRON_CHANGE_BEGIN
+#ifndef GST_DISABLE_GST_DEBUG
+#include "gstframerate.h"
+#include "gstcpuusage.h"
+#endif
+//CRESTRON_CHANGE_END
 
 static gboolean
 plugin_init (GstPlugin * plugin)
@@ -51,6 +57,16 @@ plugin_init (GstPlugin * plugin)
   if (!gst_tracer_register (plugin, "factories",
           gst_factories_tracer_get_type ()))
     return FALSE;
+//CRESTRON_CHANGE_BEGIN
+#ifndef GST_DISABLE_GST_DEBUG
+  if (!gst_tracer_register (plugin, "framerate", gst_framerate_tracer_get_type ())) {
+    return FALSE;
+  }
+  if (!gst_tracer_register (plugin, "cpuusage", gst_cpu_usage_tracer_get_type ())) {
+    return FALSE;
+  }
+#endif
+//CRESTRON_CHANGE_END
   return TRUE;
 }
 

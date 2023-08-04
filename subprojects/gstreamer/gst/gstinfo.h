@@ -818,6 +818,13 @@ GST_CAT_LEVEL_LOG_ID (GstDebugCategory * cat, GstDebugLevel level,
 /* This one doesn't have varargs in the macro, so it's different than all the
  * other macros and hence in a separate block right here. Docs chunks are
  * with the other doc chunks below though. */
+// CRESTRON CHANGE BEGIN //
+//Note: 12-8-2021 let's keep track of Crestron version now.
+#define GST_CRESTRON_VERSION 12
+
+#if 1	// Crestron Change: commenting out because it caused CPU load
+#define __GST_CAT_MEMDUMP_LOG(cat,object,msg,data,length)  G_STMT_START{ }G_STMT_END
+#else 	// original implmentation
 #define __GST_CAT_MEMDUMP_LOG(cat,object,msg,data,length) G_STMT_START{       \
     if (G_UNLIKELY (GST_LEVEL_MEMDUMP <= GST_LEVEL_MAX &&		      \
 		    GST_LEVEL_MEMDUMP <= _gst_debug_min)) {		      \
@@ -825,6 +832,8 @@ GST_CAT_LEVEL_LOG_ID (GstDebugCategory * cat, GstDebugLevel level,
         (GObject *) (object), (msg), (data), (length));                       \
   }                                                                           \
 }G_STMT_END
+#endif
+// CRESTRON CHANGE END //
 
 /**
  * __GST_CAT_MEMDUMP_LOG_ID:

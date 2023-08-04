@@ -200,6 +200,11 @@ log_latency (const GstStructure * data, GstElement * sink_parent,
   gst_tracer_record_log (tr_latency, id_element_src, element_src, src,
       id_element_sink, element_sink, sink, GST_CLOCK_DIFF (src_ts, sink_ts),
       sink_ts);
+//CRESTRON_CHANGE_BEGIN
+  // added gst error so that it can be capture UI logs
+  GST_ERROR("Latency - element=(string)%s time=(gint64)%llu\n", element_src, GST_CLOCK_DIFF (src_ts, sink_ts));
+//CRESTRON_CHANGE_EN
+
   g_free (sink);
   g_free (element_sink);
   g_free (id_element_sink);
