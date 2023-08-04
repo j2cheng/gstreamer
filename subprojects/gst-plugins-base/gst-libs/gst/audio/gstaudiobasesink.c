@@ -75,6 +75,10 @@ struct _GstAudioBaseSinkPrivate
   GstAudioBaseSinkCustomSlavingCallback custom_slaving_callback;
   gpointer custom_slaving_cb_data;
   GDestroyNotify custom_slaving_cb_notify;
+
+  // CRESTRON_CHANGE_BEGIN
+  gint dropping_late_sample_counter;
+  // CRESTRON_CHANGE_END
 };
 
 /* BaseAudioSink signals and args */
@@ -290,6 +294,9 @@ gst_audio_base_sink_init (GstAudioBaseSink * audiobasesink)
   audiobasesink->priv->custom_slaving_callback = NULL;
   audiobasesink->priv->custom_slaving_cb_data = NULL;
   audiobasesink->priv->custom_slaving_cb_notify = NULL;
+  // CRESTRON_CHANGE_BEGIN
+  audiobasesink->priv->dropping_late_sample_counter = 0;
+  // CRESTRON_CHANGE_END
 
   audiobasesink->provided_clock = gst_audio_clock_new ("GstAudioSinkClock",
       (GstAudioClockGetTimeFunc) gst_audio_base_sink_get_time, audiobasesink,
@@ -2063,6 +2070,20 @@ gst_audio_base_sink_render (GstBaseSink * bsink, GstBuffer * buf)
   if (G_UNLIKELY (render_start == 0 && render_stop == 0))
     goto too_late;
 
+// CRESTRON_CHANGE_BEGIN
+  if(sink->priv->dropping_late_sample_counter)
+  {
+      if(sink->priv->dropping_late_sample_counter >= 50)
+      {
+          GST_ELEMENT_WARNING (sink, LIBRARY, FAILED, (NULL),
+                              ("clear audio dropping late sample warning"));
+          GST_DEBUG_OBJECT (sink, "Send clear audio dropping late sample warning:%d",\
+                            sink->priv->dropping_late_sample_counter);
+      }
+      sink->priv->dropping_late_sample_counter = 0;
+  }
+// CRESTRON_CHANGE_END
+  
   /* and bring the time to the rate corrected offset in the buffer */
   render_start = gst_util_uint64_scale_int (render_start, rate, GST_SECOND);
   render_stop = gst_util_uint64_scale_int (render_stop, rate, GST_SECOND);
@@ -2210,6 +2231,15 @@ too_late:
   {
     GST_DEBUG_OBJECT (sink, "dropping late sample");
     ret = GST_FLOW_OK;
+    // CRESTRON_CHANGE_BEGIN
+    sink->priv->dropping_late_sample_counter++;
+    if( (sink->priv->dropping_late_sample_counter % 50) == 0 )
+    {
+        GST_ELEMENT_WARNING (sink, LIBRARY, FAILED, (NULL),("Audio dropping late sample"));
+        GST_DEBUG_OBJECT (sink, "Send audio dropping late sample warning:%d",sink->priv->dropping_late_sample_counter);
+    }
+    // CRESTRON_CHANGE_END
+
     goto done;
   }
   /* ERRORS */

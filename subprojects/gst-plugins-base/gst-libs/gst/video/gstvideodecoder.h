@@ -436,6 +436,20 @@ GST_VIDEO_API
 void     gst_video_decoder_set_latency (GstVideoDecoder *decoder,
 					GstClockTime min_latency,
 					GstClockTime max_latency);
+//CRESTRON_CHANGE_BEGIN
+GST_VIDEO_API
+void     gst_video_decoder_set_latency_new (GstVideoDecoder * decoder,
+                    GstClockTime latency, gboolean lock);
+
+GST_VIDEO_API
+void    gst_video_decoder_set_dec_max_input_frames (GstVideoDecoder * decoder,
+                    guint max_input_frames,gboolean lock);
+
+GST_VIDEO_API
+void    gst_video_decoder_set_dec_frames_drop_interval (GstVideoDecoder * decoder,
+                    guint drop_frames_interval, gboolean lock);
+//CRESTRON_CHANGE_END
+
 
 GST_VIDEO_API
 void     gst_video_decoder_get_latency (GstVideoDecoder *decoder,
@@ -519,6 +533,15 @@ GstFlowReturn    gst_video_decoder_finish_frame (GstVideoDecoder *decoder,
 GST_VIDEO_API
 GstFlowReturn    gst_video_decoder_finish_subframe (GstVideoDecoder *decoder,
                                                  GstVideoCodecFrame *frame);
+
+//Crestron Change start
+GST_VIDEO_API
+GstFlowReturn gst_video_decoder_finish_and_remove_frame (GstVideoDecoder * decoder,
+                                                        GstVideoCodecFrame * frame,
+                                                        gint64 ts_offset,
+                                                        guint64 push_delay_max,
+                                                        gboolean use_legacy_method);
+//Crestron change end
 
 GST_VIDEO_API
 GstFlowReturn    gst_video_decoder_drop_frame (GstVideoDecoder *dec,

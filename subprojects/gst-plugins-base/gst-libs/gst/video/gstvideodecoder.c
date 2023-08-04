@@ -326,6 +326,19 @@ enum
   PROP_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS,
 };
 
+#define GST_VIDEO_DECODER_GET_PRIVATE(obj)  \
+    (G_TYPE_INSTANCE_GET_PRIVATE ((obj), GST_TYPE_VIDEO_DECODER, \
+        GstVideoDecoderPrivate))
+
+//CRESTRON_CHANGE_BEGIN
+#define FIRST_N_FRAMES_MAX 5
+#define CONSECUTIVE_LATE_FRAMES_MAX 3
+#define LATENCY_RAMP_NS 25000000  //25ms
+#define DEC_FRAMES_DROP_INTERVAL_MIN 1
+#define DEC_FRAMES_DROP_INTERVAL_MAX 60
+#define DEC_FRAMES_DROP_INTERVAL_DEFAULT 15
+ //CRESRON_CHANGE_END
+
 struct _GstVideoDecoderPrivate
 {
   /* FIXME introduce a context ? */
@@ -466,6 +479,18 @@ struct _GstVideoDecoderPrivate
    * from flush to first output */
   GstClockTime last_reset_time;
 #endif
+
+  // CRESTRON_CHANGE_BEGIN
+  GstClockID cached_clock_id;
+  int firstNframesCounter;	//consecutive frame count since Play state
+  int NlateFramesCount;		//consecutive late frames count
+  gint64 frameTSoffset;	//timestamp offset
+  guint64 frameCounter;		//frame
+  guint64 latency ;
+  guint  dec_max_input_frames;
+  guint64 curr_latency;
+  guint  dec_frames_drop_interval;
+  // CRESTRON_CHANGE_END
 };
 
 static GstElementClass *parent_class = NULL;
@@ -552,6 +577,12 @@ static void gst_video_decoder_copy_metas (GstVideoDecoder * decoder,
 static void gst_video_decoder_request_sync_point_internal (GstVideoDecoder *
     dec, GstClockTime deadline, GstVideoDecoderRequestSyncPointFlags flags);
 
+//CRESTRON_CHANGE_BEGIN
+static guint64 gst_ramp_latency(GstVideoDecoder *decoder);
+
+static guint gst_decoder_output_processed_signal = 0;
+//CRESTRON_CHANGE_END
+
 /* we can't use G_DEFINE_ABSTRACT_TYPE because we need the klass in the _init
  * method to get to the padtemplates */
 GType
@@ -606,6 +637,20 @@ gst_video_decoder_class_init (GstVideoDecoderClass * klass)
 
   if (private_offset != 0)
     g_type_class_adjust_private_offset (klass, &private_offset);
+
+  // Crestron Change begin //
+  gst_decoder_output_processed_signal =
+  g_signal_new ("crestron-vdec-output",              // signal_name
+		  G_TYPE_FROM_CLASS (klass),                 // itype
+		  G_SIGNAL_RUN_FIRST,                        // signal_flags
+		  0,                                         // class_offset
+		  NULL,                                      // accumulator
+		  NULL,                                      // accu_data
+		  g_cclosure_marshal_generic,                // c_marshaller
+		  G_TYPE_NONE,                               // return_type
+		  0                                          // n_params
+		  );
+  // Crestron Change end //
 
   gobject_class->finalize = gst_video_decoder_finalize;
   gobject_class->get_property = gst_video_decoder_get_property;
@@ -784,6 +829,18 @@ gst_video_decoder_init (GstVideoDecoder * decoder, GstVideoDecoderClass * klass)
       DEFAULT_AUTOMATIC_REQUEST_SYNC_POINTS;
   decoder->priv->automatic_request_sync_point_flags =
       DEFAULT_AUTOMATIC_REQUEST_SYNC_POINT_FLAGS;
+
+// CRESTRON_CHANGE_BEGIN
+  decoder->priv->cached_clock_id = NULL;
+  decoder->priv->firstNframesCounter = 0;
+  decoder->priv->NlateFramesCount    = 0;
+  decoder->priv->frameTSoffset = 0;
+  decoder->priv->frameCounter = 0;
+  decoder->priv->latency = 0;
+  decoder->priv->dec_max_input_frames = 0;
+  decoder->priv->curr_latency = 0;
+  decoder->priv->dec_frames_drop_interval = DEC_FRAMES_DROP_INTERVAL_DEFAULT;
+// CRESTRON_CHANGE_END
 
   gst_video_decoder_reset (decoder, TRUE, TRUE);
 }
@@ -971,6 +1028,14 @@ gst_video_decoder_finalize (GObject * object)
     gst_object_unref (decoder->priv->allocator);
     decoder->priv->allocator = NULL;
   }
+
+  //CRESTRON_CHANGE_BEGIN
+  decoder->priv->firstNframesCounter = 0;
+  decoder->priv->NlateFramesCount    = 0;
+  decoder->priv->frameTSoffset = 0;
+  decoder->priv->frameCounter  = 0;
+  decoder->priv->curr_latency = 0;
+  //CRESTRON_CHANGE_END
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
@@ -2867,6 +2932,19 @@ gst_video_decoder_change_state (GstElement * element, GstStateChange transition)
       break;
   }
 
+//// Crestron Change Begin ////
+// Fix deadlock on stop - release clock wait
+  if (transition == GST_STATE_CHANGE_PAUSED_TO_READY)
+  {
+	  if (decoder->priv->cached_clock_id)
+	  {
+		  GST_DEBUG_OBJECT (decoder, "Freeing clock id %d from wait", decoder->priv->cached_clock_id);
+		  gst_clock_id_unschedule(decoder->priv->cached_clock_id);
+	  }
+  }
+//// Crestron Change End ////
+
+
   ret = GST_ELEMENT_CLASS (parent_class)->change_state (element, transition);
 
   switch (transition) {
@@ -2878,6 +2956,14 @@ gst_video_decoder_change_state (GstElement * element, GstStateChange transition)
 
       GST_VIDEO_DECODER_STREAM_LOCK (decoder);
       gst_video_decoder_reset (decoder, TRUE, TRUE);
+// CRESTRON_CHANGE_BEGIN
+      if (decoder->priv->cached_clock_id)
+      {
+          gst_clock_id_unref (decoder->priv->cached_clock_id);
+          decoder->priv->cached_clock_id = NULL;
+      }
+// CRESTRON_CHANGE_END
+
       GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
 
       if (!stopped)
@@ -3457,6 +3543,13 @@ gst_video_decoder_finish_frame (GstVideoDecoder * decoder,
   }
 
   gst_video_decoder_prepare_finish_frame (decoder, frame, FALSE);
+  // CRESTRON_CHANGE_BEGIN
+  if(priv->processed == 0)
+  {
+    GST_LOG_OBJECT (decoder, "finish_frame emit signal");
+    g_signal_emit (decoder, gst_decoder_output_processed_signal,0);
+  }
+  // CRESTRON_CHANGE_END
   priv->processed++;
 
   if (priv->tags_changed) {
@@ -5376,3 +5469,278 @@ gst_video_decoder_get_needs_sync_point (GstVideoDecoder * dec)
 
   return result;
 }
+
+// CRESTRON_CHANGE_BEGIN
+/**
+ * gst_video_decoder_finish_and_remove_frame:
+ * @decoder: a #GstVideoDecoder
+ * @frame: (transfer full): a decoded empty frame
+ *
+ *
+ * Returns:
+ */
+GstFlowReturn
+gst_video_decoder_finish_and_remove_frame (GstVideoDecoder * decoder,
+    GstVideoCodecFrame * frame, gint64 ts_offset, guint64 push_delay_max, gboolean use_legacy_method)
+{
+  GstFlowReturn ret = GST_FLOW_OK;
+  GstVideoDecoderPrivate *priv = decoder->priv;
+  GstBuffer *output_buffer;
+  gboolean needs_reconfigure = FALSE;
+  guint64 latency = decoder->priv->latency;
+
+  GST_LOG_OBJECT (decoder, "finish_and_remove_frame %p", frame);
+
+  if(use_legacy_method)
+  {
+  //For low startup latency
+    latency = gst_ramp_latency(decoder);
+  }
+
+  needs_reconfigure = gst_pad_check_reconfigure (decoder->srcpad);
+  if (G_UNLIKELY (priv->output_state_changed || (priv->output_state
+              && needs_reconfigure))) {
+    if (!gst_video_decoder_negotiate_unlocked (decoder)) {
+      gst_pad_mark_reconfigure (decoder->srcpad);
+      if (GST_PAD_IS_FLUSHING (decoder->srcpad))
+        ret = GST_FLOW_FLUSHING;
+      else
+        ret = GST_FLOW_NOT_NEGOTIATED;
+      goto done;
+    }
+  }
+
+  GstClockTime last_timestamp_out = decoder->priv->last_timestamp_out;
+  gst_video_decoder_prepare_finish_frame (decoder, frame, TRUE);
+
+  if(priv->processed == 0)
+  {
+    GST_INFO_OBJECT (decoder, "finish_and_remove_frame emit signal");
+    g_signal_emit (decoder, gst_decoder_output_processed_signal,0); 
+  }
+
+  priv->processed++;
+
+  {
+        GstSegment *segment = &decoder->output_segment;
+        if (G_UNLIKELY (segment->format == GST_FORMAT_UNDEFINED))
+        {
+            segment = &decoder->input_segment;
+            GST_INFO_OBJECT (decoder, "using input segment");
+        }
+
+        GstClockTime timestamp = frame->pts;
+        GstClockTime pts_delta = timestamp - last_timestamp_out;
+        GstClockTime currentTime = gst_clock_get_time(decoder->element.clock);
+        GstClockTime internalTime = gst_clock_get_internal_time(decoder->element.clock);
+        GstClockTime adjTime;
+        GstClockReturn wait_ret;
+        //GstClockID clock_id;
+        GstClockTime qostime = gst_segment_to_running_time (segment, GST_FORMAT_TIME, timestamp);
+        GstClockTime stream_time =
+                               gst_segment_to_stream_time (segment, GST_FORMAT_TIME, timestamp);
+
+        adjTime = decoder->element.base_time + qostime + ts_offset + latency;
+
+        GstClockTime clockTime = gst_clock_get_internal_time(decoder->element.clock);
+        GST_INFO_OBJECT( decoder,
+      	                 " adjTime based on base_time: frame id[%lu],frams_len[%d], state[%d], base time[%" GST_TIME_FORMAT "], current time[%" GST_TIME_FORMAT "], adjust to time[%" GST_TIME_FORMAT "], offset[%lld], qostime[%" GST_TIME_FORMAT "], latency[%" GST_TIME_FORMAT "]",
+      	                  frame->decode_frame_number,                          
+                          g_queue_get_length (&decoder->priv->frames),
+                          decoder->element.current_state,
+      	                  GST_TIME_ARGS (decoder->element.base_time),
+      	                  GST_TIME_ARGS (clockTime),
+                          GST_TIME_ARGS (adjTime),
+                          (ts_offset),
+                          GST_TIME_ARGS (qostime),
+                          GST_TIME_ARGS (latency));
+
+        /* Re-use existing clockid if available */
+        if (decoder->priv->cached_clock_id != NULL)
+        {
+            if (!gst_clock_single_shot_id_reinit (decoder->element.clock,
+                                                  decoder->priv->cached_clock_id,
+                                                  adjTime))
+            {
+                gst_clock_id_unref (decoder->priv->cached_clock_id);
+                decoder->priv->cached_clock_id = gst_clock_new_single_shot_id (decoder->element.clock,
+                                                                               adjTime);
+                GST_WARNING_OBJECT (decoder, "gst_clock_single_shot_id_reinit failed[%d]",
+                                  decoder->priv->cached_clock_id);
+            }
+        }
+        else
+        {
+            decoder->priv->cached_clock_id = gst_clock_new_single_shot_id (decoder->element.clock,
+                                                                           adjTime);
+            GST_INFO_OBJECT (decoder, "new clock ID [%d]",decoder->priv->cached_clock_id);
+        }
+        
+        int framListSize = g_queue_get_length (&decoder->priv->frames);
+        int framesDropInterval = decoder->priv->dec_frames_drop_interval;
+        if((framesDropInterval < DEC_FRAMES_DROP_INTERVAL_MIN) || (framesDropInterval > DEC_FRAMES_DROP_INTERVAL_MAX))
+        {
+        	framesDropInterval = DEC_FRAMES_DROP_INTERVAL_DEFAULT;
+            GST_FIXME_OBJECT (decoder, "Drop interval[%d] is out of range[%d-%d]. Use default[%d].",
+            		decoder->priv->dec_frames_drop_interval,
+					DEC_FRAMES_DROP_INTERVAL_MIN,
+					DEC_FRAMES_DROP_INTERVAL_MAX,
+					framesDropInterval);
+        }
+
+        GST_INFO_OBJECT (decoder, "got framListSize[%d],max_input_frames[%d]",framListSize,decoder->priv->dec_max_input_frames);
+
+        //Note; dec_max_input_frames -- 0: disabled, 1: enabled
+        if((priv->processed-1 > 0) && (decoder->priv->dec_max_input_frames == 0) && (frame->decode_frame_number%framesDropInterval == 0) ||
+            (decoder->priv->dec_max_input_frames > 0)  && (framListSize > decoder->priv->dec_max_input_frames))
+        {           
+            ret = GST_FLOW_CUSTOM_ERROR_1;
+            GST_FIXME_OBJECT (decoder, "Drop frame: state[%d] : frame id[%lu],processed[%d],max_input_frames[%d],frames_drop_interval[%d]",
+                              decoder->element.current_state,
+                              frame->decode_frame_number, 
+                              priv->processed,
+                              decoder->priv->dec_max_input_frames,
+							  framesDropInterval);
+        }
+        else
+        {            
+            if(decoder->element.current_state == GST_STATE_PLAYING)
+            {
+                GstClockTimeDiff timeDiff_ns = 0;
+                GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+                wait_ret = gst_clock_id_wait (decoder->priv->cached_clock_id, &timeDiff_ns);
+                GST_VIDEO_DECODER_STREAM_LOCK (decoder);
+                if(wait_ret != GST_CLOCK_OK)
+                {
+                    if ((wait_ret == GST_CLOCK_EARLY) && (push_delay_max > 0))
+                    {
+                        if (timeDiff_ns > push_delay_max)
+                        {
+                          GST_INFO_OBJECT (decoder,
+                                  "pts[%" GST_TIME_FORMAT "], currentTime[%" GST_TIME_FORMAT "], internalTime[%" GST_TIME_FORMAT "], stream_time[%" GST_TIME_FORMAT "] pts_delta[%" GST_TIME_FORMAT "]",
+                                  GST_TIME_ARGS ((decoder->element.base_time+timestamp)),
+                                  GST_TIME_ARGS (currentTime),
+                                  GST_TIME_ARGS (internalTime),
+                                  GST_TIME_ARGS (stream_time),
+                                  GST_TIME_ARGS (pts_delta));
+
+                          GST_INFO_OBJECT (decoder,
+                                  "base_time[%" GST_TIME_FORMAT "], qostime[%" GST_TIME_FORMAT "], offset[%" G_GUINT64_FORMAT "], adjTime[%" GST_TIME_FORMAT "], min_latency[%" G_GUINT64_FORMAT "], segment format[%d]",
+                                  GST_TIME_ARGS (decoder->element.base_time),
+                                  GST_TIME_ARGS (qostime),
+                                  ts_offset,
+                                  GST_TIME_ARGS (adjTime),
+                                  decoder->priv->min_latency,
+                                  segment->format);
+
+                            ret = GST_FLOW_CUSTOM_ERROR_1;
+                            gchar *dec_name = gst_element_get_name (decoder);
+                            GST_FIXME_OBJECT (decoder, "Drop frame: frame id[% "G_GUINT64_FORMAT "], clock_id_wait ret[%d], return[%d], jitter[%lluns], max[%lluns], decoder[%s]", decoder->priv->frameCounter, wait_ret, ret,
+                              timeDiff_ns, push_delay_max, dec_name); //Crestron change reduce log level
+                            g_free (dec_name);
+                        }
+                    }
+                }
+            }//else
+        }
+
+        GST_INFO_OBJECT (decoder, "current_state is[%d] : frame id[%lu],processed[%d],ret[%d]",
+                         decoder->element.current_state,
+                         frame->decode_frame_number, 
+                         priv->processed,
+                         ret); 
+  }
+
+  /* Release frame so the buffer is writable when we push it downstream
+   * if possible, i.e. if the subclass does not hold additional references
+   * to the frame
+   */
+  gst_video_decoder_release_frame (decoder, frame);
+  frame = NULL;
+
+done:
+  if (frame)
+    gst_video_decoder_release_frame (decoder, frame);
+
+  decoder->priv->frameCounter++;
+  GST_VIDEO_DECODER_STREAM_UNLOCK (decoder);
+  return ret;
+}
+/**
+ * gst_video_decoder_set_latency_new:
+ * @decoder: a #GstVideoDecoder
+ * @latency: latency
+ *
+ * Lets #GstVideoDecoder sub-classes tell the baseclass what the decoder
+ * latency is.
+ */
+void
+gst_video_decoder_set_latency_new (GstVideoDecoder * decoder,
+    GstClockTime latency,gboolean lock)
+{
+  g_return_if_fail (GST_CLOCK_TIME_IS_VALID (latency));
+
+  if(lock)
+      GST_OBJECT_LOCK (decoder);
+  decoder->priv->latency = latency;
+
+  if(lock)
+      GST_OBJECT_UNLOCK (decoder);
+}
+/**
+ * gst_video_decoder_set_dec_max_input_frames:
+ * @decoder: a #GstVideoDecoder
+ * @max_input_frames: max_input_frames
+ *
+ */
+void
+gst_video_decoder_set_dec_max_input_frames (GstVideoDecoder * decoder,
+    guint max_input_frames,gboolean lock)
+{
+  if(lock)
+      GST_OBJECT_LOCK (decoder);
+      
+  decoder->priv->dec_max_input_frames = max_input_frames;
+
+  if(lock)
+      GST_OBJECT_UNLOCK (decoder);
+
+  GST_LOG_OBJECT (decoder, "set_dec_max_input_frames %d", max_input_frames);
+}
+
+guint64 gst_ramp_latency(GstVideoDecoder *decoder)
+{
+    guint64 latency = decoder->priv->latency;
+
+    if(decoder->priv->curr_latency < decoder->priv->latency)
+    {
+        decoder->priv->curr_latency+= LATENCY_RAMP_NS;
+        
+        if(decoder->priv->curr_latency > decoder->priv->latency)
+        {
+            decoder->priv->curr_latency = decoder->priv->latency;
+        }
+
+        latency = decoder->priv->curr_latency;
+
+        GST_FIXME_OBJECT (decoder, "gst_ramp_latency: frame id[% "G_GUINT64_FORMAT "], latency[% "G_GUINT64_FORMAT "]", decoder->priv->frameCounter, latency);
+    }
+
+    return(latency);
+}
+
+void
+gst_video_decoder_set_dec_frames_drop_interval (GstVideoDecoder * decoder,
+    guint frames_drop_interval, gboolean lock)
+{
+  if(lock)
+      GST_OBJECT_LOCK (decoder);
+
+  decoder->priv->dec_frames_drop_interval = frames_drop_interval;
+
+  if(lock)
+      GST_OBJECT_UNLOCK (decoder);
+
+  GST_LOG_OBJECT (decoder, "set_dec_frames drop interval %d", frames_drop_interval);
+}
+// CRESTRON_CHANGE_END

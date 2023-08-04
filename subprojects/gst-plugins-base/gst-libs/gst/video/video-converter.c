@@ -1,3 +1,5 @@
+
+
 /* GStreamer
  * Copyright (C) 2010 David Schleef <ds@schleef.org>
  * Copyright (C) 2010 Sebastian Dröge <sebastian.droege@collabora.co.uk>
@@ -37,6 +39,10 @@
 #include <gst/base/base.h>
 
 #include "video-orc.h"
+
+// CRESTRON_CHANGE_BEGIN
+#include <dlfcn.h>
+// CRESTRON_CHANGE_END
 
 /**
  * SECTION:videoconverter
@@ -475,6 +481,9 @@ struct _GstVideoConverter
     GstVideoScaler **scaler;
   } fv_scaler[4];
   FastConvertFunc fconvert[4];
+  // CRESTRON_CHANGE_BEGIN
+  void *libyuvso;
+  // CRESTRON_CHANGE_END
 
   /* for parallel async running */
   gpointer tasks[4];
@@ -2335,6 +2344,14 @@ gst_video_converter_new_with_pool (const GstVideoInfo * in_info,
 
   convert = g_slice_new0 (GstVideoConverter);
 
+//CRESTRON_CHANGE_BEGIN
+  convert->libyuvso = dlopen("/system/lib/libyuv.so", RTLD_NOW);
+  if( convert->libyuvso == NULL )
+  {
+      GST_ERROR("Could not load libyuv.so");
+  }
+//CRESTRON_CHANGE_END
+
   fin = in_info->finfo;
   fout = out_info->finfo;
 
@@ -2585,6 +2602,13 @@ gst_video_converter_free (GstVideoConverter * convert)
   guint i, j;
 
   g_return_if_fail (convert != NULL);
+//CRESTRON_CHANGE_BEGIN
+  if( convert->libyuvso )
+  {
+      dlclose(convert->libyuvso);
+      convert->libyuvso = NULL;
+  }
+//CRESTRON_CHANGE_END
 
   for (i = 0; i < convert->conversion_runner->n_threads; i++) {
     if (convert->upsample_p && convert->upsample_p[i])
@@ -3536,6 +3560,129 @@ convert_I420_UYVY (GstVideoConverter * convert, const GstVideoFrame * src,
     }
   }
 }
+
+// CRESTRON_CHANGE_BEGIN
+/* This function does YUV I420 format to NV12
+I420 - YYYY...UUUU...VVVV
+NV12 - YYYY... UVUVUVUV...
+Calls libYUV module
+*/
+static void
+convert_I420_NV12 (GstVideoConverter * convert, const GstVideoFrame * src,
+    GstVideoFrame * dest)
+{
+    const uint8_t* src_y = FRAME_GET_Y_LINE (src, 0);
+    int src_stride_y = convert->in_width;
+    const uint8_t* src_u = FRAME_GET_U_LINE (src, 0);
+    int src_stride_u = convert->in_width/2;
+    const uint8_t* src_v = FRAME_GET_V_LINE (src, 0);
+    int src_stride_v = convert->in_width/2;;
+    uint8_t* dst_y = FRAME_GET_Y_LINE (dest, 0);
+    int dst_stride_y = convert->in_width;  //since the data is inteleaved, the stride is width.
+    uint8_t* dst_uv = FRAME_GET_U_LINE (dest, 0);;
+    int dst_stride_uv = convert->in_width;
+    int width = convert->in_width;
+    int height = convert->in_height;
+    int iRet;
+    int (*fn_ptr)(const uint8_t* src_y,
+               int src_stride_y,
+               const uint8_t* src_u,
+               int src_stride_u,
+               const uint8_t* src_v,
+               int src_stride_v,
+               uint8_t* dst_y,
+               int dst_stride_y,
+               uint8_t* dst_uv,
+               int dst_stride_uv,
+               int width,
+               int height);
+
+    fn_ptr = dlsym(convert->libyuvso, "I420ToNV12");
+
+    if( fn_ptr != NULL )
+    {
+
+        // TODO:
+        // currently single thread implementation.
+        // For 1920x1080, the CPU load is less than 10%.
+
+        //calling libyuv
+        iRet = fn_ptr( src_y,
+                src_stride_y,
+                src_u,
+                src_stride_u,
+                src_v,
+                src_stride_v,
+                dst_y,
+                dst_stride_y,
+                dst_uv,
+                dst_stride_uv,
+                width,
+                height);
+
+        if( iRet != 0 )
+        {
+            GST_ERROR(" libyuv returned error - %d",iRet);
+        }
+    }
+    else
+    {
+        GST_ERROR(" libyuv: I420ToNV12 is not implemented, Conversion failed");
+    }
+}
+
+/* this module does conversion of YUY2 to NV12
+*/
+
+static void
+convert_YUY2_NV12 (GstVideoConverter * convert, const GstVideoFrame * src,
+    GstVideoFrame * dest)
+{
+    const uint8_t* src_y = FRAME_GET_Y_LINE (src, 0);;
+    int src_stride_y = convert->in_width*2;
+    uint8_t* dst_y = FRAME_GET_Y_LINE (dest, 0);
+    int dst_stride_y = convert->in_width;
+    uint8_t* dst_uv = FRAME_GET_U_LINE (dest, 0);;
+    int dst_stride_uv = convert->in_width;
+    int width = convert->in_width;
+    int height = convert->in_height;
+    int iRet;
+    int (*fn_ptr)(const uint8_t* src_yuy2,
+            int src_stride_yuy2,
+            uint8_t* dst_y,
+            int dst_stride_y,
+            uint8_t* dst_uv,
+            int dst_stride_uv,
+            int width,
+            int height);
+    fn_ptr = dlsym(convert->libyuvso, "YUY2ToNV12");
+
+    if( fn_ptr != NULL )
+    {
+        //TODO
+        //currently single thread implementation
+        //For 1920x1080 resolution, the conversion taking less than 10%
+
+        iRet = fn_ptr( src_y,
+                src_stride_y,
+                dst_y,
+                dst_stride_y,
+                dst_uv,
+                dst_stride_uv,
+                width,
+                height);
+
+        if( iRet != 0 )
+        {
+            GST_ERROR(" libyuv returned error - %d",iRet);
+        }
+    }
+    else
+    {
+        GST_ERROR(" libyuv: YUY2ToNV12 is not implemented, Conversion failed");
+    }
+}
+// CRESTRON_CHANGE_END
 
 static void
 convert_I420_AYUV_task (FConvertTask * task)
@@ -7703,7 +7850,10 @@ static const VideoTransform transforms[] = {
       FALSE, FALSE, TRUE, FALSE, 0, 0, convert_I420_AYUV},
   {GST_VIDEO_FORMAT_I420, GST_VIDEO_FORMAT_v210, TRUE, FALSE, TRUE, FALSE,
       FALSE, FALSE, FALSE, FALSE, 0, 0, convert_I420_v210},
-
+  // CRESTRON_CHANGE_BEGIN
+  {GST_VIDEO_FORMAT_I420, GST_VIDEO_FORMAT_NV12, TRUE, FALSE, TRUE, FALSE,
+      FALSE, FALSE, FALSE, FALSE, 0, 0, convert_I420_NV12},
+  // CRESTRON_CHANGE_END
   {GST_VIDEO_FORMAT_YV12, GST_VIDEO_FORMAT_YUY2, TRUE, FALSE, TRUE, FALSE,
       FALSE, FALSE, FALSE, FALSE, 0, 0, convert_I420_YUY2},
   {GST_VIDEO_FORMAT_YV12, GST_VIDEO_FORMAT_UYVY, TRUE, FALSE, TRUE, FALSE,
@@ -7771,6 +7921,10 @@ static const VideoTransform transforms[] = {
       TRUE, FALSE, FALSE, FALSE, 0, 0, convert_YUY2_Y444},
   {GST_VIDEO_FORMAT_UYVY, GST_VIDEO_FORMAT_GRAY8, TRUE, TRUE, TRUE, TRUE,
       TRUE, FALSE, FALSE, FALSE, 0, 0, convert_UYVY_GRAY8},
+// CRESTRON_CHANGE_BEGIN
+  {GST_VIDEO_FORMAT_YUY2, GST_VIDEO_FORMAT_NV12, TRUE, TRUE, TRUE, TRUE,
+      TRUE, FALSE, FALSE, FALSE, 0, 0, convert_YUY2_NV12},
+// CRESTRON_CHANGE_END
 
   {GST_VIDEO_FORMAT_UYVY, GST_VIDEO_FORMAT_I420, TRUE, FALSE, TRUE, FALSE,
       FALSE, FALSE, FALSE, FALSE, 0, 0, convert_UYVY_I420},
@@ -8227,6 +8381,27 @@ video_converter_lookup_fastpath (GstVideoConverter * convert)
   border = convert->out_x || convert->out_y
       || convert->out_width < convert->out_maxwidth
       || convert->out_height < convert->out_maxheight;
+
+// CRESTRON_CHANGE_BEGIN
+
+  if( (in_format == GST_VIDEO_FORMAT_I420 || in_format == GST_VIDEO_FORMAT_YUY2 )
+          && out_format == GST_VIDEO_FORMAT_NV12
+    )
+  {
+      //check if we can open dll
+      if( !convert->libyuvso )
+      {
+          GST_ERROR ("libyuv.so is not found so going with generic implementation");
+          return FALSE;
+      }
+      if ( interlaced == TRUE )
+      {
+          //currently code is only tested for non interlace.
+          GST_ERROR("Interlace mode with fast mode is not supported");
+          return FALSE;
+      }
+  }
+// CRESTRON_CHANGE_END
 
   for (i = 0; i < G_N_ELEMENTS (transforms); i++) {
     if (transforms[i].in_format == in_format &&

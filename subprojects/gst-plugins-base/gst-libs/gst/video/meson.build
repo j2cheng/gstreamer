@@ -113,7 +113,8 @@ gstvideo_h = video_enums[1]
 video_gen_sources = [gstvideo_h]
 
 orcsrc = 'video-orc'
-gstvideo_deps = [gst_base_dep, libm]
+libdl_dep = cc.find_library('dl', required: true)
+gstvideo_deps = [gst_base_dep, libm, libdl_dep]
 if have_orcc
   gstvideo_deps += [orc_dep]
   orc_h = custom_target(orcsrc + '.h',
