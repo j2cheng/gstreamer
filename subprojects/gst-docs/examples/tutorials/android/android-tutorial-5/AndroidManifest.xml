@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
     package="org.freedesktop.gstreamer.tutorials.tutorial_5"
     android:versionCode="1"
     android:versionName="1.0" >
@@ -24,7 +25,8 @@
             </intent-filter>
 
             <!-- Local files whose MIME type is known to Android -->
-            <intent-filter>
+            <intent-filter
+                tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
@@ -61,7 +63,8 @@
 
             <!-- Remote files. These typically have unknown MIME type.
                  The list of extensions and supported protocols can certainly be extended. -->
-            <intent-filter>
+            <intent-filter
+                tools:ignore="AppLinkUrlError">
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />

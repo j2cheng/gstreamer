@@ -69,7 +69,7 @@ public class Tutorial5 extends Activity implements SurfaceHolder.Callback, OnSee
         setContentView(R.layout.main);
 
         PowerManager pm = (PowerManager) getSystemService(Context.POWER_SERVICE);
-        wake_lock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "GStreamer tutorial 5");
+        wake_lock = pm.newWakeLock(PowerManager.FULL_WAKE_LOCK, "GStreamer:tutorial_5");
         wake_lock.setReferenceCounted(false);
 
         ImageButton play = (ImageButton) this.findViewById(R.id.button_play);
@@ -127,7 +127,7 @@ public class Tutorial5 extends Activity implements SurfaceHolder.Callback, OnSee
                 if (uri.getScheme().equals("content")) {
                     android.database.Cursor cursor = getContentResolver().query(uri, null, null, null, null);
                     cursor.moveToFirst();
-                    mediaUri = "file://" + cursor.getString(cursor.getColumnIndex(android.provider.MediaStore.Video.Media.DATA));
+                    mediaUri = "file://" + cursor.getString(cursor.getColumnIndexOrThrow(android.provider.MediaStore.Video.Media.DATA));
                     cursor.close();
                 } else
                     mediaUri = uri.toString();
