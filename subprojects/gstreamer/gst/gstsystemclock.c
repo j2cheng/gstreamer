@@ -185,7 +185,7 @@ gst_futex_cond_wait_until (guint * cond_val, GMutex * mutex, gint64 end_time)
    * define `__NR_futex_time64`.
    */
 
-#ifdef __NR_futex_time64 && !defined(ANDROID)
+#if defined(__NR_futex_time64) && !defined(ANDROID)
   {
     struct
     {
