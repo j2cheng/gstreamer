@@ -127,7 +127,7 @@ gst_futex_cond_broadcast (guint * cond_val)
 {
   g_atomic_int_inc (cond_val);
 
-#if defined(__NR_futex_time64)
+#if defined(__NR_futex_time64) && !defined(__ANDROID__)
   {
     int res;
     res = syscall (__NR_futex_time64, cond_val, (gsize) FUTEX_WAKE_PRIVATE,
@@ -185,7 +185,7 @@ gst_futex_cond_wait_until (guint * cond_val, GMutex * mutex, gint64 end_time)
    * define `__NR_futex_time64`.
    */
 
-#ifdef __NR_futex_time64
+#ifdef __NR_futex_time64 && !defined(__ANDROID__)
   {
     struct
     {

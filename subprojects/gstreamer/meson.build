@@ -312,7 +312,7 @@ if cc.compiles('''#include <linux/futex.h>
                int main (int argc, char ** argv) {
                  syscall (__NR_futex_time64, NULL, FUTEX_WAKE, FUTEX_WAIT);
                  return 0;
-               }''', name : 'futex(2) system call') and host_system != 'android'
+               }''', name : 'futex_time64(2) system call') and host_system != 'android'
   cdata.set('HAVE_FUTEX_TIME64', 1)
 endif
 
