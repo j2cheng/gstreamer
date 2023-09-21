@@ -79,10 +79,10 @@ enum
 #define DEFAULT_RTP_PROFILE          GST_RTP_PROFILE_AVP
 #define DEFAULT_RTCP_REDUCED_SIZE    FALSE
 #define DEFAULT_RTCP_DISABLE_SR_TIMESTAMP FALSE
-#define DEFAULT_UNASSIGNED_PT        G_MAXINT16//Crestron change: payload type can only be 8 bit
 #define DEFAULT_FAVOR_NEW            FALSE
 #define DEFAULT_TWCC_FEEDBACK_INTERVAL GST_CLOCK_TIME_NONE
 #define DEFAULT_UPDATE_NTP64_HEADER_EXT TRUE
+#define DEFAULT_UNASSIGNED_PT        G_MAXINT16//Crestron change: payload type can only be 8 bit
 
 enum
 {
@@ -109,9 +109,9 @@ enum
   PROP_RTP_PROFILE,
   PROP_RTCP_REDUCED_SIZE,
   PROP_RTCP_DISABLE_SR_TIMESTAMP,
-  PROP_DEFAULT_PT,   //CRESTRON CHANGE
   PROP_TWCC_FEEDBACK_INTERVAL,
   PROP_UPDATE_NTP64_HEADER_EXT,
+  PROP_DEFAULT_PT,   //CRESTRON CHANGE
   PROP_LAST,
 };
 
@@ -624,22 +624,12 @@ rtp_session_class_init (RTPSessionClass * klass)
    *
    * Since: 1.16
    */
-#if 0
   properties[PROP_RTCP_DISABLE_SR_TIMESTAMP] =
       g_param_spec_boolean ("disable-sr-timestamp",
       "Disable Sender Report Timestamp",
       "Whether sender reports should be timestamped",
       DEFAULT_RTCP_DISABLE_SR_TIMESTAMP,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-#endif
-  //CRESTRON CHANGE BEGIN
-  properties[PROP_DEFAULT_PT] =
-      g_param_spec_uint ("default-pt",
-                         "default payload type",
-                         "The payload of the RTP session",
-                         0, G_MAXINT16, DEFAULT_UNASSIGNED_PT,
-                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
-  //CRESTRON CHANGE END
 
   /**
    * RTPSession:twcc-feedback-interval:
@@ -672,6 +662,14 @@ rtp_session_class_init (RTPSessionClass * klass)
       DEFAULT_UPDATE_NTP64_HEADER_EXT,
       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
 
+  //CRESTRON CHANGE BEGIN
+  properties[PROP_DEFAULT_PT] =
+      g_param_spec_uint ("default-pt", "default payload type",
+                         "The payload of the RTP session",
+                         0, G_MAXINT16, DEFAULT_UNASSIGNED_PT,
+                         G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS);
+  //CRESTRON CHANGE END
+ 
   g_object_class_install_properties (gobject_class, PROP_LAST, properties);
 
   klass->get_source_by_ssrc =
@@ -712,15 +710,15 @@ rtp_session_init (RTPSession * sess)
   sess->rtcp_bandwidth = DEFAULT_RTCP_FRACTION;
   sess->rtcp_rr_bandwidth = DEFAULT_RTCP_RR_BANDWIDTH;
   sess->rtcp_rs_bandwidth = DEFAULT_RTCP_RS_BANDWIDTH;
-  //CRESTRON CHANGE BEGIN
-  sess->default_pt = DEFAULT_UNASSIGNED_PT;
-  //CRESTRON CHANGE END
 
   /* default UDP header length */
   sess->header_len = UDP_IP_HEADER_OVERHEAD;
   sess->mtu = DEFAULT_RTCP_MTU;
 
   sess->update_ntp64_header_ext = DEFAULT_UPDATE_NTP64_HEADER_EXT;
+  //CRESTRON CHANGE BEGIN
+  sess->default_pt = DEFAULT_UNASSIGNED_PT;
+  //CRESTRON CHANGE END
 
   sess->probation = DEFAULT_PROBATION;
   sess->max_dropout_time = DEFAULT_MAX_DROPOUT_TIME;

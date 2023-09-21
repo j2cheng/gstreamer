@@ -246,9 +246,9 @@ enum
   PROP_TWCC_STATS,
   PROP_RTP_PROFILE,
   PROP_NTP_TIME_SOURCE,
-  PROP_DEFAULT_PT,//CRESTRON CHANGE
   PROP_RTCP_SYNC_SEND_TIME,
-  PROP_UPDATE_NTP64_HEADER_EXT
+  PROP_UPDATE_NTP64_HEADER_EXT,
+  PROP_DEFAULT_PT //CRESTRON CHANGE
 };
 
 #define GST_RTP_SESSION_LOCK(sess)   g_mutex_lock (&(sess)->priv->lock)
@@ -837,6 +837,7 @@ gst_rtp_session_class_init (GstRtpSessionClass * klass)
               0, G_MAXINT16, DEFAULT_UNASSIGNED_PT,
               G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 //CRESTRON CHANGE END
+
   gstelement_class->change_state =
       GST_DEBUG_FUNCPTR (gst_rtp_session_change_state);
   gstelement_class->request_new_pad =

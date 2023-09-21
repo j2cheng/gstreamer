@@ -3094,7 +3094,7 @@ _get_inband_ntp_time (GstRtpJitterBuffer * jitterbuffer, GstRTPBuffer * rtp)
 }
 
 //CRESTRON BEGIN
-  static GQuark qk_domain;
+static GQuark qk_domain;
 //CRESTRON END
 
 static GstFlowReturn
