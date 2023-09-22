@@ -1432,7 +1432,7 @@ gst_amc_video_enc_set_format (GstVideoEncoder * encoder,
       GST_STR_NULL (format_string));
   g_free (format_string);
 
-  if (!gst_amc_codec_configure (self->codec, format, NULL, &err)) {
+  if (!gst_amc_codec_configure (self->codec, format, (void *)self->surface_window_id, NULL, &err)) {
     GST_ERROR_OBJECT (self, "Failed to configure codec");
     GST_ELEMENT_ERROR_FROM_ERROR (self, err);
     goto quit;

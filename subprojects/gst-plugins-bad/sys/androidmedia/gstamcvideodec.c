@@ -612,7 +612,6 @@ gst_amc_video_dec_open (GstVideoDecoder * decoder)
   self->flushing = TRUE;
 
   // CRESTRON_CHANGE_BEGIN
-  //self->codec->surface = self->surface_window_id;  
   self->deq_buf_timeout_counter = 0;
 
   //Note: following properties should be set by now.
@@ -620,7 +619,7 @@ gst_amc_video_dec_open (GstVideoDecoder * decoder)
                     self->surface_window_id,self->amcdec_is_dec_and_sink);
   // CRESTRON_CHANGE_END
 
-  GST_DEBUG_OBJECT (self, "Opened decoder");
+  GST_DEBUG_OBJECT (self, "Opened decoder %s", klass->codec_info->name);
 
   return TRUE;
 }
@@ -1620,9 +1619,9 @@ retry:
   }
 
   GST_DEBUG_OBJECT (self,
-          "Got output buffer at index %d: offset %d size %d time %" G_GINT64_FORMAT
-          " flags 0x%08x", idx, buffer_info.offset, buffer_info.size,
-          buffer_info.presentation_time_us, buffer_info.flags);
+      "Got output buffer at index %d: offset %d size %d time %" G_GINT64_FORMAT
+      " flags 0x%08x", idx, buffer_info.offset, buffer_info.size,
+      buffer_info.presentation_time_us, buffer_info.flags);
   //CRESTRON_CHANGE_BEGIN
   if(!self->amcdec_is_dec_and_sink)
   {

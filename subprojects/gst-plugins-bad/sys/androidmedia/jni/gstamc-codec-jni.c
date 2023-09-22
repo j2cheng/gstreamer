@@ -573,7 +573,7 @@ gst_amc_codec_free (GstAmcCodec * codec)
 
 gboolean
 gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
-    GstAmcSurfaceTexture * surface, GError ** err)
+    GstAmcSurfaceTexture * surface, void *override_surface, GError ** err)
 {
   JNIEnv *env;
   gint flags = 0;
@@ -585,6 +585,15 @@ gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
 
   env = gst_amc_jni_get_env ();
 
+  if (codec->is_encoder)
+    flags = 1;
+
+  if(override_surface) {
+      return gst_amc_jni_call_void_method (
+          env, err, codec->object,
+          media_codec.configure, format->object, override_surface, NULL, flags);
+  }
+
   if (surface) {
     g_object_unref (codec->surface);
     codec->surface =
@@ -592,9 +601,6 @@ gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
     if (!codec->surface)
       return FALSE;
   }
-
-  if (codec->is_encoder)
-    flags = 1;
 
   return gst_amc_jni_call_void_method (env, err, codec->object,
       media_codec.configure, format->object,

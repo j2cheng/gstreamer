@@ -53,7 +53,7 @@ gboolean gst_amc_buffer_set_position_and_limit (GstAmcBuffer * buffer, GError **
 GstAmcCodec * gst_amc_codec_new (const gchar *name, gboolean is_encoder, GError **err);
 void gst_amc_codec_free (GstAmcCodec * codec);
 
-gboolean gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, GstAmcSurfaceTexture * surface_texture, GError **err);
+gboolean gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format, GstAmcSurfaceTexture * surface_texture, void *override_surface, GError **err);
 GstAmcFormat * gst_amc_codec_get_output_format (GstAmcCodec * codec, GError **err);
 
 gboolean gst_amc_codec_start (GstAmcCodec * codec, GError **err);
