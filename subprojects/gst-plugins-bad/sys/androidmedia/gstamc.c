@@ -570,9 +570,15 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
 {
   gint i;
 
-  GST_INFO("color_format 0x%08x (%s)", (guint)color_format, mime ? mime : "");
+  g_assert(codec_info);
 
-  for(guint j = 0; codec_info && j < codec_info->n_supported_types; ++j)
+  GST_INFO(
+      "%s color_format 0x%08x (%s), codec supported_types %d",
+      codec_info->name,
+      (guint)color_format, mime ? mime : "",
+      codec_info->n_supported_types);
+
+  for(gint j = 0; j < codec_info->n_supported_types; ++j)
   {
       GstAmcCodecType *type = codec_info->supported_types + j;
 
@@ -616,6 +622,11 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
           ("OMX.amlogic.video.encoder.avc: COLOR_FormatYUV420SemiPlanar is actually GST_VIDEO_FORMAT_NV21.");
       return GST_VIDEO_FORMAT_NV21;
     }        
+  }
+
+  if (color_format == COLOR_FormatAndroidOpaque &&
+    strcmp (codec_info->name, "c2.rk.avc.decoder") == 0) {
+      return GST_VIDEO_FORMAT_NV12;
   }
 
   for (i = 0; i < G_N_ELEMENTS (color_format_mapping_table); i++) {
