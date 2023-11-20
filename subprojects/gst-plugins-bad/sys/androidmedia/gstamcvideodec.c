@@ -943,7 +943,7 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   gint stride, slice_height;
   gint crop_left, crop_right;
   gint crop_top, crop_bottom;
-  GstVideoFormat gst_format;
+  GstVideoFormat gst_format = GST_VIDEO_FORMAT_UNKNOWN;
   GstAmcVideoDecClass *klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
   GError *err = NULL;
   gboolean ret;

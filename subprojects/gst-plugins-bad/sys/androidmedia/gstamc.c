@@ -570,6 +570,22 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
 {
   gint i;
 
+  GST_INFO("color_format 0x%08x (%s)", (guint)color_format, mime ? mime : "");
+
+  for(guint j = 0; codec_info && j < codec_info->n_supported_types; ++j)
+  {
+      GstAmcCodecType *type = codec_info->supported_types + j;
+
+      for(guint k = 0; k < type->n_color_formats; ++k)
+      {
+          GST_DEBUG(
+               "%s %u/%u color_format 0x%08x/%d",
+              type->mime ? type->mime : "",
+              j, codec_info->n_supported_types,
+              type->color_formats[k], type->n_color_formats);
+      }
+  }
+
   if (color_format == COLOR_FormatYCbYCr) {
     if (strcmp (codec_info->name, "OMX.k3.video.decoder.avc") == 0) {
       GST_INFO
@@ -579,11 +595,11 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
 
     /* FIXME COLOR_FormatYCbYCr doesn't work properly for OMX.k3.video.encoder.avc temporarily. */
     if (strcmp (codec_info->name, "OMX.k3.video.encoder.avc") == 0) {
-      GST_INFO
-          ("OMX.k3.video.encoder.avc: COLOR_FormatYCbYCr is not supported yet.");
+      GST_WARNING("OMX.k3.video.encoder.avc: COLOR_FormatYCbYCr is not supported yet.");
       return GST_VIDEO_FORMAT_UNKNOWN;
     }
 
+    GST_WARNING("COLOR_FormatYCbYCr is not supported yet.");
     /* FIXME COLOR_FormatYCbYCr is not supported in gst_amc_color_format_info_set yet, mask it. */
     return GST_VIDEO_FORMAT_UNKNOWN;
   }
@@ -607,6 +623,7 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
       return color_format_mapping_table[i].video_format;
   }
 
+  GST_WARNING("color_format 0x%08x, not supported", color_format);
   return GST_VIDEO_FORMAT_UNKNOWN;
 }
 

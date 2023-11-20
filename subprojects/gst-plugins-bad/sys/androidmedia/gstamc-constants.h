@@ -92,6 +92,11 @@ enum
   COLOR_Format18BitBGR666 = 41,
   COLOR_Format24BitARGB6666 = 42,
   COLOR_Format24BitABGR6666 = 43,
+  /* https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatSurface
+   * COLOR_FormatSurface
+   * Added in API level 18
+   * public static final int COLOR_FormatSurface
+   * Constant Value: 2130708361 (0x7f000789) */
   COLOR_FormatAndroidOpaque = 0x7F000789,
   COLOR_TI_FormatYUV420PackedSemiPlanar = 0x7f000100,
   COLOR_INTEL_FormatYUV420PackedSemiPlanar = 0x7fa00e00,
@@ -105,6 +110,23 @@ enum
   COLOR_QCOM_FormatYVU420SemiPlanar32mMultiView = 0x7fa30c05,
   /* From hardware/ti/omap4xxx/domx/omx_core/inc/OMX_TI_IVCommon.h */
   COLOR_TI_FormatYUV420PackedSemiPlanarInterlaced = 0x7f000001,
+  /* https://developer.android.com/reference/android/media/MediaCodecInfo.CodecCapabilities#COLOR_FormatYUV420Flexible
+   * COLOR_FormatYUV420Flexible
+   * Added in API level 21
+   * public static final int COLOR_FormatYUV420Flexible
+   * Flexible 12 bits per pixel,
+   * subsampled YUV color format with 8-bit chroma and luma components.
+   * Chroma planes are subsampled by 2 both horizontally and vertically.
+   * Use this format with Image.
+   * This format corresponds to ImageFormat.YUV_420_888,
+   * and can represent the
+   * COLOR_FormatYUV411Planar,
+   * COLOR_FormatYUV411PackedPlanar,
+   * COLOR_FormatYUV420Planar,
+   * COLOR_FormatYUV420PackedPlanar,
+   * COLOR_FormatYUV420SemiPlanar
+   * and COLOR_FormatYUV420PackedSemiPlanar formats.
+   * Constant Value: 2135033992 (0x7f420888) */
   COLOR_FormatYUV420Flexible = 0x7f420888,
   /* This format is Exynos specific from the OMX vendor-specific
    * numeric range, but is defined in the Android OMX headers, so
