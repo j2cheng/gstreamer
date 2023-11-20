@@ -990,7 +990,7 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     GST_ERROR_OBJECT (self, "Unknown color format 0x%08x", color_format);
     return FALSE;
   } else {
-      GST_DEBUG_OBJECT (self, "color format 0x%08x, video format 0x%08x"
+      GST_DEBUG_OBJECT (self, "color format 0x%08x, video format 0x%08x",
                         color_format, gst_format);
   }
 
