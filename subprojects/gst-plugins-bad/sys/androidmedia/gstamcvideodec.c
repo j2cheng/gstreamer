@@ -2119,7 +2119,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   self = GST_AMC_VIDEO_DEC (decoder);
   klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
 
-  GST_DEBUG_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
+  GST_INFO_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
 
   /* Check if the caps change is a real format change or if only irrelevant
    * parts of the caps have changed or nothing at all.
@@ -2163,6 +2163,8 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   }
 
   if (needs_disable && is_format_change) {
+    GST_INFO_OBJECT (self, "format %s change, need decoder restart",
+      format_string ? format_string : "");
     gst_amc_video_dec_drain (self);
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
     gst_amc_video_dec_stop (GST_VIDEO_DECODER (self));
