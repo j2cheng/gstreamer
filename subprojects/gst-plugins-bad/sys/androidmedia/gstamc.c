@@ -746,6 +746,11 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
       color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
   }
 
+  if(color_format == COLOR_FormatAndroidOpaque &&
+    strcmp (codec_info->name, "c2.rk.avc.decoder") == 0) {
+      color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
+  }
+
   // CRESTRON_CHANGE_END
 
   /* Samsung Galaxy S3 seems to report wrong strides.
@@ -841,7 +846,7 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
       break;
     }
     default:
-      GST_ERROR ("Unsupported color format %d", color_format);
+      GST_ERROR ("Unsupported color format 0x%08x", color_format);
       return FALSE;
       break;
   }
