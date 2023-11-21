@@ -998,7 +998,8 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     gchar *format_string = format ? gst_amc_format_to_string(format, &err) : NULL;
 
     GST_INFO_OBJECT(
-      self, "%s, format %s, caps %" GST_PTR_FORMAT,
+      self, "%s, %s, format %s, caps %" GST_PTR_FORMAT,
+      klass->codec_info->name,
       mime ? mime : "",
       format_string ? format_string : "",
       self->input_state->caps);
@@ -1063,6 +1064,11 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
       slice_height = height+16;  //2 extra bytes is modelled after x70 qcom codec query.
       GST_DEBUG_OBJECT (self, "CODEC query cannot find stride and or slice-height. Use stride[%d], slice-height[%d]", stride, slice_height);
     }
+    else if(strcmp (klass->codec_info->name, "c2.rk.avc.decoder") == 0) {
+      stride = width;
+      slice_height = height;
+      GST_WARNING_OBJECT (self, "cannot find stride and or slice-height. Use stride[%d], slice-height[%d]", stride, slice_height);
+    }
     else
     {
     //CRESTRON_END
@@ -1083,7 +1089,7 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     return FALSE;
   }
 
-  GST_DEBUG_OBJECT (self,
+  GST_INFO_OBJECT (self,
       "Color format info: {color_format=%d (0x%08x), width=%d, height=%d, "
       "stride=%d, slice-height=%d, crop-left=%d, crop-top=%d, "
       "crop-right=%d, crop-bottom=%d, frame-size=%d}",
