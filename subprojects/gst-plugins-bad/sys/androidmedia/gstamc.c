@@ -584,7 +584,7 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
 
       for(guint k = 0; k < type->n_color_formats; ++k)
       {
-          GST_DEBUG(
+          GST_INFO(
                "%s %u/%u color_format 0x%08x/%d",
               type->mime ? type->mime : "",
               j, codec_info->n_supported_types,

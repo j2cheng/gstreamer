@@ -990,14 +990,14 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     GST_ERROR_OBJECT (self, "Unknown color format 0x%08x", color_format);
     return FALSE;
   } else {
-      GST_DEBUG_OBJECT (self, "color format 0x%08x, video format 0x%08x",
+      GST_INFO_OBJECT (self, "color format 0x%08x, video format 0x%08x",
                         color_format, gst_format);
   }
   
   if(self->input_state && self->input_state->caps) {
     gchar *format_string = format ? gst_amc_format_to_string(format, &err) : NULL;
 
-    GST_DEBUG_OBJECT(
+    GST_INFO_OBJECT(
       self, "%s, format %s, caps %" GST_PTR_FORMAT,
       mime ? mime : "",
       format_string ? format_string : "",
