@@ -993,6 +993,19 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
       GST_DEBUG_OBJECT (self, "color format 0x%08x, video format 0x%08x",
                         color_format, gst_format);
   }
+  
+  if(self->input_state && self->input_state->caps) {
+    gchar *format_string = format ? gst_amc_format_to_string(format, &err) : NULL;
+
+    GST_DEBUG_OBJECT(
+      self, "%s, format %s, caps %" GST_PTR_FORMAT,
+      mime ? mime : "",
+      format_string ? format_string : "",
+      self->input_state->caps);
+
+    if(format_string) g_free(format_string);
+  }
+
 
   output_state = gst_video_decoder_set_output_state (GST_VIDEO_DECODER (self),
       gst_format, width, height, self->input_state);
@@ -1032,11 +1045,13 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   //CRESTRON_BEGIN
   //1080: CODEC query returns unexpected color format, and stride and slice-height are not found in the map by the CODEC.
   //May be due to BSP for 1080 built with a newer version of Gstreamer (1.19 vs 1.16.2). Will workaround both issues for now.
+#if 0
   if(color_format == COLOR_FormatAndroidOpaque)
   {
     GST_DEBUG_OBJECT (self, "Received unexpected color format[0x%x] from CODEC. Use color_format[0x%x]", color_format, COLOR_QCOM_FormatYUV420SemiPlanar_X80);
     color_format = COLOR_QCOM_FormatYUV420SemiPlanar_X80;
   }
+#endif
 //CRESTRON_END
   if (!gst_amc_format_get_int (format, "stride", &stride, &err) ||
       !gst_amc_format_get_int (format, "slice-height", &slice_height, &err)) {
