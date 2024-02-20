@@ -44,6 +44,7 @@
 #include <gst/video/gstvideometa.h>
 #include <gst/video/gstvideoaffinetransformationmeta.h>
 #include <gst/video/gstvideopool.h>
+#include <gst/video/gstvideodecoder.h>
 #include <string.h>
 
 #ifdef HAVE_ORC
@@ -74,7 +75,6 @@ struct _BufferIdentification
   guint64 timestamp;
 };
 
-// CRESTRON_CHANGE_BEGIN
 #define DEFAULT_MAX_FRAME_PUSH_DELAY  0
 
 //Note:12-7-2021, amcdec can be set to original decoder or
@@ -108,8 +108,6 @@ static gboolean default_element_query (GstElement * element, GstQuery * query);
 
 static gboolean
 gst_amc_video_dec_send_event (GstElement * element, GstEvent * event);
-
-// CRESTRON_CHANGE_END
 
 struct gl_sync_result
 {
@@ -363,10 +361,10 @@ caps_to_mime (GstCaps * caps)
   } else if (strcmp (name, "video/x-divx") == 0) {
     return "video/mp4v-es";
   } else if (strcmp (name, "image/jpeg") == 0) {//Crestron added
-	//GST_ERROR("Crestron PEM image/jpeg --> video/mjpeg"); //Crestron added				  
+	//GST_ERROR("Crestron PEM image/jpeg --> video/mjpeg"); //Crestron added
     return "video/mjpeg";                       //Crestron added
   }
-  
+
   return NULL;
 }
 
@@ -390,35 +388,21 @@ gst_amc_video_dec_base_init (gpointer g_class)
 
   gst_amc_codec_info_to_caps (codec_info, &sink_caps, &src_caps);
 
-  // CRESTRON_CHANGE_BEGIN
   if (codec_info->name)
   {
-    GST_LOG("Crestron gst_amc_video_dec_base_init --> codec_info[0x%x],name[%s],is_encoder[%d]",
+    GST_LOG("Crestron gst_amc_video_dec_base_init --> codec_info[%p],name[%s],is_encoder[%d]",
               codec_info, codec_info->name, codec_info->is_encoder);
-  }//else
+  }
 
   if (sink_caps)
-  {
-    GST_LOG("Crestron gst_amc_video_dec_base_init : sink_caps [%s]", (guchar *)gst_caps_to_string(sink_caps));
-  }
-  else
-  {
-    GST_LOG("Crestron gst_amc_video_dec_base_init : sink_caps is NULL");
-  }
+    GST_DEBUG("Crestron gst_amc_video_dec_base_init : sink_caps %" GST_PTR_FORMAT, sink_caps);
 
   if (src_caps)
-  {
-    GST_LOG("Crestron gst_amc_video_dec_base_init : src_caps [%s]", (guchar *)gst_caps_to_string(src_caps));
-  }
-  else
-  {
-    GST_LOG("Crestron gst_amc_video_dec_base_init : src_caps is NULL");
-  }  
+    GST_DEBUG("Crestron gst_amc_video_dec_base_init : src_caps %" GST_PTR_FORMAT, src_caps);
 
- #ifdef GST_CRESTRON_VERSION 
+ #ifdef GST_CRESTRON_VERSION
   GST_DEBUG("Crestron gst_amc_video_dec_base_init : GST_CRESTRON_VERSION[%d]",GST_CRESTRON_VERSION);
  #endif
-  //CRESTRON_CHANGE_BEGIN   
 
   all_src_caps =
       gst_caps_from_string ("video/x-raw(" GST_CAPS_FEATURE_MEMORY_GL_MEMORY
@@ -478,18 +462,14 @@ gst_amc_video_dec_class_init (GstAmcVideoDecClass * klass)
       GST_DEBUG_FUNCPTR (gst_amc_video_dec_decide_allocation);
   videodec_class->src_query = GST_DEBUG_FUNCPTR (gst_amc_video_dec_src_query);
 
-  // CRESTRON_CHANGE_BEGIN
   gobject_class->set_property = GST_DEBUG_FUNCPTR( gst_amc_video_dec_set_property);
   gobject_class->get_property = GST_DEBUG_FUNCPTR( gst_amc_video_dec_get_property);
 
   g_object_class_install_property (gobject_class,
                                    PROP_SURFACEWINDOW,
-                                   g_param_spec_uint ("surface-window",
+                                   g_param_spec_pointer ("surface-window",
                                                       "Surface window",
                                                       "Surface window for decoder to render",
-                                                      0,
-                                                      G_MAXUINT,
-                                                      0,
                                                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   g_object_class_install_property (gobject_class,
@@ -556,7 +536,6 @@ gst_amc_video_dec_class_init (GstAmcVideoDecClass * klass)
                                                       60,
 													  AMCDEC_DEC_FRAMES_DROP_INTERVAL_DEFAULT,
                                                       G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-  // CRESTRON_CHANGE_END
 }
 
 static void
@@ -572,7 +551,7 @@ gst_amc_video_dec_init (GstAmcVideoDec * self)
   g_cond_init (&self->gl_cond);
 
   self->gl_queue = g_queue_new ();
-  //CRESTRON_CHANGE_BEGIN
+  self->surface_window_id = NULL;
   self->push_delay_max = DEFAULT_MAX_FRAME_PUSH_DELAY;
   GST_DEBUG_OBJECT (self, "set push_delay_max to [%llu]", self->push_delay_max);
 
@@ -589,7 +568,6 @@ gst_amc_video_dec_init (GstAmcVideoDec * self)
   GST_DEBUG_OBJECT (self, "set default amcdec_is_dec_and_sink to [%d]", self->amcdec_is_dec_and_sink);
   self->dec_frames_drop_interval  = AMCDEC_DEC_FRAMES_DROP_INTERVAL_DEFAULT;
   GST_DEBUG_OBJECT (self, "set default dec_frames_drop_interval to [%d]", self->dec_frames_drop_interval);
-  //CRESTRON_CHANGE_END
 }
 
 static gboolean
@@ -611,13 +589,11 @@ gst_amc_video_dec_open (GstVideoDecoder * decoder)
   self->started = FALSE;
   self->flushing = TRUE;
 
-  // CRESTRON_CHANGE_BEGIN
   self->deq_buf_timeout_counter = 0;
 
   //Note: following properties should be set by now.
-  GST_DEBUG_OBJECT (self, "Opening decoder: surface_window_id[0x%x],amcdec_is_dec_and_sink[%d]",
+  GST_DEBUG_OBJECT (self, "Opening decoder: surface_window_id %p, amcdec_is_dec_and_sink %d",
                     self->surface_window_id,self->amcdec_is_dec_and_sink);
-  // CRESTRON_CHANGE_END
 
   GST_DEBUG_OBJECT (self, "Opened decoder %s", klass->codec_info->name);
 
@@ -715,6 +691,8 @@ gst_amc_video_dec_finalize (GObject * object)
 {
   GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (object);
 
+  GST_INFO("begin");
+
   g_mutex_clear (&self->drain_lock);
   g_cond_clear (&self->drain_cond);
 
@@ -727,6 +705,7 @@ gst_amc_video_dec_finalize (GObject * object)
   }
 
   G_OBJECT_CLASS (parent_class)->finalize (object);
+  GST_INFO("end");
 }
 
 static void
@@ -762,24 +741,11 @@ gst_amc_video_dec_change_state (GstElement * element, GstStateChange transition)
       self->downstream_flow_ret = GST_FLOW_OK;
       self->draining = FALSE;
       self->started = FALSE;
-
-      //// CRESTRON CHANGE BEGIN ////
-      if(self->amcdec_is_dec_and_sink)
-      {
-        //if this is also sink
-        self->have_latency = TRUE;
-      }//else
-      //// CRESTRON CHANGE END ////
-
+      if(self->amcdec_is_dec_and_sink) self->have_latency = TRUE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_PLAYING:
-//// CRESTRON CHANGE BEGIN ////
       // Added because sinks should handle pause state if this is also sink
-      if(self->amcdec_is_dec_and_sink)
-      {
-        self->started = TRUE;
-      }//else
-//// CRESTRON CHANGE END ////
+      if(self->amcdec_is_dec_and_sink) self->started = TRUE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       self->flushing = TRUE;
@@ -807,13 +773,8 @@ gst_amc_video_dec_change_state (GstElement * element, GstStateChange transition)
 
   switch (transition) {
     case GST_STATE_CHANGE_PLAYING_TO_PAUSED:
-//// CRESTRON CHANGE BEGIN ////
       // Added because sinks should handle pause state if this is also sink
-      if(self->amcdec_is_dec_and_sink)
-      {
-        self->started = FALSE;
-      }//else
-//// CRESTRON CHANGE END ////
+      if(self->amcdec_is_dec_and_sink) self->started = FALSE;
       break;
     case GST_STATE_CHANGE_PAUSED_TO_READY:
       self->downstream_flow_ret = GST_FLOW_FLUSHING;
@@ -900,7 +861,7 @@ _find_nearest_frame (GstAmcVideoDec * self, GstClockTime reference_timestamp)
 
   if (finish_frames) {
       GST_WARNING_OBJECT (self,"%s: Too old frames, bug in decoder -- please file a bug",
-        GST_ELEMENT_NAME (self));// CRESTRON_CHANGE
+        GST_ELEMENT_NAME (self));
     for (l = finish_frames; l; l = l->next) {
       gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), l->data);
     }
@@ -993,7 +954,7 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
       GST_INFO_OBJECT (self, "color format 0x%08x, video format 0x%08x",
                         color_format, gst_format);
   }
-  
+
   if(self->input_state && self->input_state->caps) {
     gchar *format_string = format ? gst_amc_format_to_string(format, &err) : NULL;
 
@@ -1043,7 +1004,6 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     goto out;
   }
 
-  //CRESTRON_BEGIN
   //1080: CODEC query returns unexpected color format, and stride and slice-height are not found in the map by the CODEC.
   //May be due to BSP for 1080 built with a newer version of Gstreamer (1.19 vs 1.16.2). Will workaround both issues for now.
 #if 0
@@ -1053,10 +1013,8 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
     color_format = COLOR_QCOM_FormatYUV420SemiPlanar_X80;
   }
 #endif
-//CRESTRON_END
   if (!gst_amc_format_get_int (format, "stride", &stride, &err) ||
       !gst_amc_format_get_int (format, "slice-height", &slice_height, &err)) {
-    //CRESTRON_BEGIN
     if ((strcmp (klass->codec_info->name, "OMX.qcom.video.decoder.avc") == 0) ||
     (strcmp (klass->codec_info->name, "OMX.qcom.video.decoder.hevc") == 0))
     {
@@ -1064,16 +1022,17 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
       slice_height = height+16;  //2 extra bytes is modelled after x70 qcom codec query.
       GST_DEBUG_OBJECT (self, "CODEC query cannot find stride and or slice-height. Use stride[%d], slice-height[%d]", stride, slice_height);
     }
-    else if(strcmp (klass->codec_info->name, "c2.rk.avc.decoder") == 0) {
+    else if(
+        strcmp (klass->codec_info->name, "c2.rk.avc.decoder") == 0
+        || strcmp (klass->codec_info->name, "c2.rk.hevc.decoder") == 0) {
       stride = width;
       slice_height = height;
       GST_WARNING_OBJECT (self, "cannot find stride and or slice-height. Use stride[%d], slice-height[%d]", stride, slice_height);
     }
     else
     {
-    //CRESTRON_END
-      GST_ERROR_OBJECT (self, "Failed to get stride and slice-height: %s",
-        err->message);
+      GST_ERROR_OBJECT (self, "Failed to get %s stride and slice-height: %s",
+        klass->codec_info->name, err->message);
       g_clear_error (&err);
       return FALSE;
     }
@@ -1090,16 +1049,21 @@ gst_amc_video_dec_set_src_caps (GstAmcVideoDec * self, GstAmcFormat * format)
   }
 
   GST_INFO_OBJECT (self,
-      "Color format info: {color_format=%d (0x%08x), width=%d, height=%d, "
-      "stride=%d, slice-height=%d, crop-left=%d, crop-top=%d, "
-      "crop-right=%d, crop-bottom=%d, frame-size=%d}",
-      self->color_format_info.color_format,
-      self->color_format_info.color_format, self->color_format_info.width,
-      self->color_format_info.height, self->color_format_info.stride,
-      self->color_format_info.slice_height, self->color_format_info.crop_left,
-      self->color_format_info.crop_top, self->color_format_info.crop_right,
-      self->color_format_info.crop_bottom, self->color_format_info.frame_size);
-
+      "color_format %d(0x%x)"
+      " width %d height %d "
+      " stride %d slice-height %d"
+      " crop[left %d top %d right %d bottom %d]"
+      "frame-size %d",
+      self->color_format_info.color_format, self->color_format_info.color_format,
+      self->color_format_info.width,
+      self->color_format_info.height,
+      self->color_format_info.stride,
+      self->color_format_info.slice_height,
+      self->color_format_info.crop_left,
+      self->color_format_info.crop_top,
+      self->color_format_info.crop_right,
+      self->color_format_info.crop_bottom,
+      self->color_format_info.frame_size);
 out:
   ret = gst_video_decoder_negotiate (GST_VIDEO_DECODER (self));
 
@@ -1527,24 +1491,22 @@ gst_amc_video_dec_loop (GstAmcVideoDec * self)
 {
   GstVideoCodecFrame *frame;
   GstFlowReturn flow_ret = GST_FLOW_OK;
-  // CRESTRON_CHANGE_BEGIN
   GstFlowReturn flow_ret2 = GST_FLOW_OK;
-  // CRESTRON_CHANGE_END
   GstClockTimeDiff deadline;
   gboolean is_eos;
-  GstAmcBuffer *buf = NULL;//CRESTRON_CHANGE
+  GstAmcBuffer *buf = NULL;
   GstAmcBufferInfo buffer_info;
   gint idx;
   GError *err = NULL;
   gboolean release_buffer = TRUE;
+  const gboolean is_sink = self->amcdec_is_dec_and_sink;
 
   GST_VIDEO_DECODER_STREAM_LOCK (self);
 
 retry:
 
-//// CRESTRON CHANGE BEGIN ////
 // Added because sinks should handle pause state
-  if(self->amcdec_is_dec_and_sink)
+  if(is_sink)
   {
     if (self->flushing) {
         g_clear_error (&err);
@@ -1554,17 +1516,14 @@ retry:
     {
         GST_DEBUG_OBJECT (self, "Crestron: state is not started, waiting for started state...");
         g_usleep (G_USEC_PER_SEC >> 1);	// sleep for 500 ms
-        goto retry;    
+        goto retry;
     }
   }//else skip here
 
   /*if (self->input_state_changed) {
      idx = INFO_OUTPUT_FORMAT_CHANGED;
      } else { */
-  GST_DEBUG_OBJECT (self, "Waiting for available output buffer. is_dec_and_sink [%d], codec_config[%d]",
-                    self->amcdec_is_dec_and_sink,self->codec_config);   
- //// CRESTRON CHANGE END ////
-  
+  GST_DEBUG_OBJECT (self, "Waiting for available output buffer");
   GST_VIDEO_DECODER_STREAM_UNLOCK (self);
   /* Wait at most 100ms here, some codecs don't fail dequeueing if
    * the codec is flushing, causing deadlocks during shutdown */
@@ -1573,13 +1532,6 @@ retry:
       &err);
   GST_VIDEO_DECODER_STREAM_LOCK (self);
   /*} */
-
-  // CRESTRON_CHANGE_BEGIN
-  if(self->amcdec_is_dec_and_sink)
-  {
-    buffer_info.size = 0;
-  }//else skip here
-  // CRESTRON_CHANGE_END
 
   GST_DEBUG_OBJECT (self, "dequeueOutputBuffer() returned %d (0x%x)", idx, idx);
 
@@ -1621,15 +1573,13 @@ retry:
         goto retry;
       }
       case INFO_TRY_AGAIN_LATER:
-        // CRESTRON_CHANGE_BEGIN
         self->deq_buf_timeout_counter++;
-        if( (self->deq_buf_timeout_counter % 50) == 0 )        
+        if( (self->deq_buf_timeout_counter % 50) == 0 )
         {
             GST_ELEMENT_WARNING (self, LIBRARY, FAILED, (NULL),
                                 ("Dequeuing output buffer timed out"));
             GST_DEBUG_OBJECT (self, "Send time out warning:%d",self->deq_buf_timeout_counter);
         }
-        // CRESTRON_CHANGE_END
         goto retry;
       case G_MININT:
         GST_ERROR_OBJECT (self, "Failure dequeueing output buffer");
@@ -1646,22 +1596,14 @@ retry:
       "Got output buffer at index %d: offset %d size %d time %" G_GINT64_FORMAT
       " flags 0x%08x", idx, buffer_info.offset, buffer_info.size,
       buffer_info.presentation_time_us, buffer_info.flags);
-  //CRESTRON_CHANGE_BEGIN
-  if(!self->amcdec_is_dec_and_sink)
-  {
 
-      buf = gst_amc_codec_get_output_buffer (self->codec, idx, &err);
-      if (err) {
-          if (self->flushing) {
-              g_clear_error (&err);
-              goto flushing;
-          }
-          goto failed_to_get_output_buffer;
-      }
-      GST_DEBUG_OBJECT (self, "gst_amc_video_dec_loop: buf(0x%x)", buf);
-
-      if (self->codec_config != AMC_CODEC_CONFIG_WITH_SURFACE && !buf)
-          goto got_null_output_buffer;
+  buf = gst_amc_codec_get_output_buffer (self->codec, idx, &err);
+  if (err) {
+    if (self->flushing) {
+      g_clear_error (&err);
+      goto flushing;
+    }
+    goto failed_to_get_output_buffer;
   }
 
   if(self->deq_buf_timeout_counter)
@@ -1674,7 +1616,9 @@ retry:
       }
       self->deq_buf_timeout_counter = 0;
   }
-  // CRESTRON_CHANGE_END
+
+  if (self->codec_config != AMC_CODEC_CONFIG_WITH_SURFACE && !buf)
+    goto got_null_output_buffer;
 
   frame =
       _find_nearest_frame (self,
@@ -1786,7 +1730,7 @@ retry:
 
     release_buffer = FALSE;
   } else if (self->codec_config == AMC_CODEC_CONFIG_WITHOUT_SURFACE && !frame
-      && buffer_info.size > 0) {
+      && buffer_info.size > 0 && !is_sink) {
     GstBuffer *outbuf;
 
     /* This sometimes happens at EOS or if the input is not properly framed,
@@ -1816,7 +1760,7 @@ retry:
         1);
     flow_ret = gst_pad_push (GST_VIDEO_DECODER_SRC_PAD (self), outbuf);
   } else if (self->codec_config == AMC_CODEC_CONFIG_WITHOUT_SURFACE && frame
-      && buffer_info.size > 0) {
+      && buffer_info.size > 0 && !is_sink) {
     if ((flow_ret =
             gst_video_decoder_allocate_output_frame (GST_VIDEO_DECODER (self),
                 frame)) != GST_FLOW_OK) {
@@ -1850,17 +1794,18 @@ retry:
     flow_ret = gst_video_decoder_finish_frame (GST_VIDEO_DECODER (self), frame);
   } else if (frame != NULL) {
 
-// CRESTRON_CHANGE_BEGIN
     //Note: if dec is used as sink(it has a surface), this is the last element in the pipeline.
-    //if(self->amcdec_is_dec_and_sink)
-    //{
-    //  flow_ret2 = gst_video_decoder_finish_and_remove_frame(GST_VIDEO_DECODER (self), frame,self->ts_offset, self->push_delay_max, self->use_legacy_method);
-    //}
-    //else
+    if(is_sink)
+    {
+      flow_ret2 =
+          gst_video_decoder_finish_and_remove_frame(
+              GST_VIDEO_DECODER (self),
+              frame,self->ts_offset, self->push_delay_max, self->use_legacy_method);
+    }
+    else
     {
       flow_ret = gst_video_decoder_drop_frame (GST_VIDEO_DECODER (self), frame);
     }
-// CRESTRON_CHANGE_END
   }
 
   if (buf) {
@@ -1869,16 +1814,11 @@ retry:
   }
 
   if (release_buffer) {
-// CRESTRON_CHANGE_BEGIN
-    gboolean render = FALSE;
-
-    if(self->amcdec_is_dec_and_sink)
-    {
-      render = (flow_ret2 == GST_FLOW_OK);
-    }//else
-
-    if (!gst_amc_codec_release_output_buffer (self->codec, idx, render, &err)) {
-// CRESTRON_CHANGE_END
+    if (!gst_amc_codec_release_output_buffer (
+            self->codec,
+            idx,
+            self->amcdec_is_dec_and_sink
+            && GST_FLOW_OK == flow_ret2 /* render */, &err)) {
       if (self->flushing) {
         g_clear_error (&err);
         goto flushing;
@@ -2107,7 +2047,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
 {
   GstAmcVideoDec *self;
   GstAmcVideoDecClass *klass;
-  GstAmcFormat *format;
+  GstAmcFormat *format = NULL;
   const gchar *mime;
   gboolean is_format_change = FALSE;
   gboolean needs_disable = FALSE;
@@ -2119,7 +2059,22 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   self = GST_AMC_VIDEO_DEC (decoder);
   klass = GST_AMC_VIDEO_DEC_GET_CLASS (self);
 
-  GST_INFO_OBJECT (self, "Setting new caps %" GST_PTR_FORMAT, state->caps);
+  GST_INFO_OBJECT(self,
+      "CURR %d(%d)x%d(%d) color_fmt %d",
+      self->color_format_info.width,
+      self->color_format_info.stride,
+      self->color_format_info.height,
+      self->color_format_info.slice_height,
+      self->color_format_info.color_format);
+
+  GST_INFO_OBJECT (
+      self,
+      "NEXT %dx%d surface_window_id %p amcdec_is_dec_and_sink %d caps %" GST_PTR_FORMAT,
+      state->info.width,
+      state->info.height,
+      self->surface_window_id,
+      self->amcdec_is_dec_and_sink,
+      state->caps);
 
   /* Check if the caps change is a real format change or if only irrelevant
    * parts of the caps have changed or nothing at all.
@@ -2163,8 +2118,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   }
 
   if (needs_disable && is_format_change) {
-    GST_INFO_OBJECT (self, "format %s change, need decoder restart",
-      format_string ? format_string : "");
+    GST_INFO_OBJECT (self, "format change, need decoder restart");
     gst_amc_video_dec_drain (self);
     GST_VIDEO_DECODER_STREAM_UNLOCK (self);
     gst_amc_video_dec_stop (GST_VIDEO_DECODER (self));
@@ -2211,12 +2165,14 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
       GST_ELEMENT_WARNING_FROM_ERROR (self, err);
   }
 
-// CRESTRON_CHANGE_BEGIN
-  GST_DEBUG_OBJECT (self, "gst_amc_video_dec_set_format",self->amcdec_is_dec_and_sink);
+  GST_DEBUG_OBJECT (
+      self,
+      "gst_amc_video_dec_set_format surface_window_id %p amcdec_is_dec_and_sink %d",
+      self->surface_window_id,
+      self->amcdec_is_dec_and_sink);
   //Note: if dec is used as sink(it has a surface), just skip the following block.
   if(!self->amcdec_is_dec_and_sink)
   {
-// CRESTRON_CHANGE_END
     gboolean downstream_supports_gl = FALSE;
     GstVideoDecoder *decoder = GST_VIDEO_DECODER (self);
     GstPad *src_pad = GST_VIDEO_DECODER_SRC_PAD (decoder);
@@ -2347,7 +2303,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
       GST_STR_NULL (format_string));
   g_free (format_string);
 
-  if (!gst_amc_codec_configure (self->codec, format, self->surface, (void *)self->surface_window_id, &err)) {
+  if (!gst_amc_codec_configure (self->codec, format, self->surface, self->surface_window_id, &err)) {
     GST_ERROR_OBJECT (self, "Failed to configure codec");
     GST_ELEMENT_ERROR_FROM_ERROR (self, err);
     return FALSE;
@@ -2371,6 +2327,7 @@ gst_amc_video_dec_set_format (GstVideoDecoder * decoder,
   gst_pad_start_task (GST_VIDEO_DECODER_SRC_PAD (self),
       (GstTaskFunction) gst_amc_video_dec_loop, decoder, NULL);
 
+  GST_INFO_OBJECT(self, "completed");
   return TRUE;
 }
 
@@ -2431,7 +2388,7 @@ gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
 
   self = GST_AMC_VIDEO_DEC (decoder);
 
-  GST_DEBUG_OBJECT (self, "Handling frame");
+  //GST_DEBUG_OBJECT (self, "Handling frame");
 
   if (!self->started) {
     GST_ERROR_OBJECT (self, "Codec not started yet");
@@ -2442,7 +2399,6 @@ gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
   if (self->flushing)
     goto flushing;
 
-  // CRESTRON_CHANGE_BEGIN
   //TODO: 12-8-2021 I don't think it is correct here .
   if (self->downstream_flow_ret != GST_FLOW_OK)
   {
@@ -2450,11 +2406,7 @@ gst_amc_video_dec_handle_frame (GstVideoDecoder * decoder,
                         self->downstream_flow_ret);
   }//else
 
-  if(self->amcdec_is_dec_and_sink)
-  {
-    self->downstream_flow_ret = GST_FLOW_OK;//crestron change for x60
-  }//else
-  //CRESTRON_CHANGE_END
+  if(self->amcdec_is_dec_and_sink) self->downstream_flow_ret = GST_FLOW_OK;// x60
 
   if (self->downstream_flow_ret != GST_FLOW_OK)
     goto downstream_error;
@@ -2635,6 +2587,7 @@ gst_amc_video_dec_finish (GstVideoDecoder * decoder)
   GstAmcVideoDec *self;
 
   self = GST_AMC_VIDEO_DEC (decoder);
+  GST_INFO_OBJECT(self, "");
 
   return gst_amc_video_dec_drain (self);
 }
@@ -2855,14 +2808,13 @@ gst_amc_video_dec_on_frame_available (GstAmcSurfaceTexture * texture,
   g_mutex_unlock (&self->gl_lock);
 }
 
-// CRESTRON_CHANGE_BEGIN
 static void gst_amc_video_dec_get_property (GObject * object, guint prop_id,
     GValue * value, GParamSpec * pspec)
 {
     g_return_if_fail (GST_IS_AMC_VIDEO_DEC (object));
 
     GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (object);
-    GST_DEBUG_OBJECT (self, "Crestron get_property:object[%p],prop_id[%d]",object,prop_id);
+    GST_TRACE_OBJECT (self, "%p id %d", object, prop_id);
 
     switch (prop_id)
     {
@@ -2911,8 +2863,6 @@ static void gst_amc_video_dec_get_property (GObject * object, guint prop_id,
           break;
         }
     }
-
-    GST_DEBUG_OBJECT (self, "Done get_property:id[%d]",prop_id);
 }
 static void
 gst_amc_video_dec_set_property (GObject * object, guint prop_id,
@@ -2921,14 +2871,14 @@ gst_amc_video_dec_set_property (GObject * object, guint prop_id,
     g_return_if_fail (GST_IS_AMC_VIDEO_DEC (object));
 
     GstAmcVideoDec *self = GST_AMC_VIDEO_DEC (object);
-    GST_DEBUG_OBJECT (self, "Crestron set_property:object[%p],prop_id[%d]",object,prop_id);
+    GST_TRACE_OBJECT (self, "%p id %d", object, prop_id);
 
     switch (prop_id)
     {
         case PROP_SURFACEWINDOW:
         {
-            self->surface_window_id = g_value_get_uint(value);
-            GST_DEBUG_OBJECT (self, "set surface_window_id[0x%x]",self->surface_window_id);
+            self->surface_window_id = g_value_get_pointer(value);
+            GST_DEBUG_OBJECT (self, "set surface_window_id %p",self->surface_window_id);
             break;
         }
         case PROP_TS_OFFSET:
@@ -2978,7 +2928,7 @@ gst_amc_video_dec_set_property (GObject * object, guint prop_id,
         {
             self->amcdec_is_dec_and_sink = g_value_get_uint(value);
             GST_DEBUG_OBJECT (self, "set amcdec_is_dec_and_sink[%d]",self->amcdec_is_dec_and_sink);
-            
+
             break;
         }
         case PROP_DEC_FRAMES_DROP_INTERVAL:
@@ -2993,7 +2943,6 @@ gst_amc_video_dec_set_property (GObject * object, guint prop_id,
             G_OBJECT_WARN_INVALID_PROPERTY_ID (object, prop_id, pspec);
             break;
     }
-    GST_DEBUG_OBJECT (self, "Done set_property:id[%d]",prop_id);
 }
 
 static gboolean
@@ -3193,4 +3142,3 @@ gst_amc_video_dec_send_event (GstElement * element, GstEvent * event)
 
   return result;
 }
-// CRESTRON_CHANGE_END

@@ -111,8 +111,7 @@ struct _GstAmcVideoDec
   guint gl_released_frame_count;  /* n buffers released */
   GQueue *gl_queue;
 
-  // CRESTRON_CHANGE_BEGIN
-  guint surface_window_id;
+  void* surface_window_id;
   gint64 ts_offset;
   gint deq_buf_timeout_counter;
   guint64 push_delay_max;
@@ -126,7 +125,6 @@ struct _GstAmcVideoDec
 
   guint amcdec_is_dec_and_sink;//decoder also acting as sink(need surface)
   guint dec_frames_drop_interval;
-  // CRESTRON_CHANGE_END
 };
 
 struct _GstAmcVideoDecClass

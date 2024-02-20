@@ -27,6 +27,9 @@
 #include "../gstamc-format.h"
 #include "gstamc-internal-jni.h"
 
+GST_DEBUG_CATEGORY_EXTERN(gst_amc_jni);
+#define GST_CAT_DEFAULT gst_amc_jni
+
 static struct
 {
   jclass klass;
@@ -154,6 +157,7 @@ gst_amc_format_new_audio (const gchar * mime, gint sample_rate, gint channels,
     goto error;
 
 done:
+  GST_INFO("%p %s rate %d channels %d", format, mime ? mime : "", sample_rate, channels);
   if (mime_str)
     gst_amc_jni_object_local_unref (env, mime_str);
   mime_str = NULL;
@@ -191,6 +195,7 @@ gst_amc_format_new_video (const gchar * mime, gint width, gint height,
     goto error;
 
 done:
+  GST_INFO("%p %s rate %dx%d", format, mime ? mime : "", width, height);
   if (mime_str)
     gst_amc_jni_object_local_unref (env, mime_str);
   mime_str = NULL;
@@ -208,6 +213,8 @@ void
 gst_amc_format_free (GstAmcFormat * format)
 {
   JNIEnv *env;
+
+  GST_INFO("%p", format);
 
   g_return_if_fail (format != NULL);
 
@@ -289,6 +296,8 @@ gst_amc_format_set_float (GstAmcFormat * format, const gchar * key,
           media_format.set_float, key_str, value))
     goto done;
 
+  GST_INFO("%p %s %f", format, key, value);
+
   ret = TRUE;
 
 done:
@@ -350,7 +359,7 @@ gst_amc_format_set_int (GstAmcFormat * format, const gchar * key, gint value,
   if (!gst_amc_jni_call_void_method (env, err, format->object,
           media_format.set_integer, key_str, value))
     goto done;
-
+  GST_INFO("%p %s %d", format, key, value);
   ret = TRUE;
 
 done:
@@ -422,6 +431,7 @@ gst_amc_format_set_string (GstAmcFormat * format, const gchar * key,
           media_format.set_string, key_str, v_str))
     goto done;
 
+  GST_INFO("%p %s %s", format, key, value);
   ret = TRUE;
 
 done:
@@ -526,6 +536,7 @@ gst_amc_format_set_buffer (GstAmcFormat * format, const gchar * key,
           media_format.set_byte_buffer, key_str, v))
     goto done;
 
+  GST_INFO("%p %s %p %d", format, key, data, (int)size);
   ret = TRUE;
 
 done:

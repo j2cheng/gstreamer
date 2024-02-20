@@ -33,6 +33,9 @@
 #define PARAMETER_KEY_REQUEST_SYNC_FRAME "request-sync"
 #define PARAMETER_KEY_VIDEO_BITRATE "video-bitrate"
 
+GST_DEBUG_CATEGORY_EXTERN(gst_amc_jni);
+#define GST_CAT_DEFAULT gst_amc_jni
+
 struct _GstAmcCodec
 {
   jobject object;               /* global reference */
@@ -535,6 +538,7 @@ done:
     gst_amc_jni_object_local_unref (env, name_str);
   name_str = NULL;
 
+  GST_INFO("%s %p", name ? name : "", codec);
   return codec;
 
 error:
@@ -552,6 +556,7 @@ gst_amc_codec_free (GstAmcCodec * codec)
   g_return_if_fail (codec != NULL);
 
   env = gst_amc_jni_get_env ();
+  GST_INFO("%p", codec);
 
   if (codec->input_buffers)
     gst_amc_jni_free_buffer_array (env, codec->input_buffers,
@@ -577,6 +582,7 @@ gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
 {
   JNIEnv *env;
   gint flags = 0;
+  gchar *format_str = NULL;
 
   g_return_val_if_fail (codec != NULL, FALSE);
   g_return_val_if_fail (format != NULL, FALSE);
@@ -584,18 +590,29 @@ gst_amc_codec_configure (GstAmcCodec * codec, GstAmcFormat * format,
       || GST_IS_AMC_SURFACE_TEXTURE_JNI (surface), FALSE);
 
   env = gst_amc_jni_get_env ();
+  format_str = gst_amc_format_to_string(format, err);
+  if(!format_str) return FALSE;
+
+  GST_INFO("MediaFormat: %s", format_str);
+  g_free(format_str);
+  format_str = NULL;
 
   if (codec->is_encoder)
     flags = 1;
 
   if(override_surface) {
+      GST_INFO(
+          "MediaCodec configure, surface %p override_surface %p",
+          surface, override_surface);
       return gst_amc_jni_call_void_method (
           env, err, codec->object,
           media_codec.configure, format->object, override_surface, NULL, flags);
   }
+  else GST_INFO("surface %p, override disabled", surface);
 
   if (surface) {
     g_object_unref (codec->surface);
+    GST_INFO("requesting new surface %p", surface);
     codec->surface =
         gst_amc_surface_new ((GstAmcSurfaceTextureJNI *) surface, err);
     if (!codec->surface)
@@ -618,6 +635,7 @@ gst_amc_codec_get_output_format (GstAmcCodec * codec, GError ** err)
 
   env = gst_amc_jni_get_env ();
 
+  GST_INFO("%p", codec);
   if (!gst_amc_jni_call_object_method (env, err, codec->object,
           media_codec.get_output_format, &object))
     goto done;
@@ -683,7 +701,6 @@ gst_amc_codec_get_output_buffers (GstAmcCodec * codec, gsize * n_buffers,
     goto done;
 
   gst_amc_jni_get_buffer_array (env, err, output_buffers, &ret, n_buffers);
-
 done:
   if (output_buffers)
     gst_amc_jni_object_local_unref (env, output_buffers);
@@ -697,6 +714,7 @@ gst_amc_codec_start (GstAmcCodec * codec, GError ** err)
   JNIEnv *env;
   gboolean ret;
 
+  GST_INFO("%p", codec);
   g_return_val_if_fail (codec != NULL, FALSE);
 
   env = gst_amc_jni_get_env ();
@@ -727,6 +745,7 @@ gst_amc_codec_stop (GstAmcCodec * codec, GError ** err)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
+  GST_INFO("%p", codec);
   env = gst_amc_jni_get_env ();
 
   if (codec->input_buffers)
@@ -752,6 +771,7 @@ gst_amc_codec_flush (GstAmcCodec * codec, GError ** err)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
+  GST_INFO("%p", codec);
   env = gst_amc_jni_get_env ();
   return gst_amc_jni_call_void_method (env, err, codec->object,
       media_codec.flush);
@@ -778,6 +798,7 @@ gst_amc_codec_set_parameter (GstAmcCodec * codec, JNIEnv * env,
           bundle, bundle_class.putInt, jkey, value))
     goto done;
 
+  GST_INFO("%p %s %d", codec, key, value);
   if (!gst_amc_jni_call_void_method (env, err, codec->object,
           media_codec.setParameters, bundle))
     goto done;
@@ -798,6 +819,7 @@ gst_amc_codec_request_key_frame (GstAmcCodec * codec, GError ** err)
 
   g_return_val_if_fail (codec != NULL, FALSE);
 
+  GST_INFO("%p", codec);
   env = gst_amc_jni_get_env ();
   return gst_amc_codec_set_parameter (codec, env, err,
       PARAMETER_KEY_REQUEST_SYNC_FRAME, 0);
@@ -830,6 +852,7 @@ gst_amc_codec_release (GstAmcCodec * codec, GError ** err)
   JNIEnv *env;
 
   g_return_val_if_fail (codec != NULL, FALSE);
+  GST_INFO("%p", codec);
 
   env = gst_amc_jni_get_env ();
 

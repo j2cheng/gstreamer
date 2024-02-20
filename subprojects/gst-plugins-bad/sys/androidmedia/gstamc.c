@@ -49,6 +49,7 @@
 #include <jni.h>
 
 GST_DEBUG_CATEGORY (gst_amc_debug);
+GST_DEBUG_CATEGORY(gst_amc_jni);
 #define GST_CAT_DEFAULT gst_amc_debug
 
 GQuark gst_amc_codec_info_quark = 0;
@@ -524,11 +525,11 @@ static const struct
   COLOR_OMX_SEC_FormatNV12Tiled, GST_VIDEO_FORMAT_NV12}, {
   COLOR_FormatYCbYCr, GST_VIDEO_FORMAT_YUY2}, {
   COLOR_FormatYV12, GST_VIDEO_FORMAT_YV12}, {
-  COLOR_ANDROID_Format_NV12, GST_VIDEO_FORMAT_NV12},// CRESTRON_CHANGE for omap
-  {COLOR_FormatYUV411Planar, GST_VIDEO_FORMAT_NV12}, // CRESTRON_CHANGE for x60
-  {COLOR_QCOM_FormatYUV420SemiPlanar_X70, GST_VIDEO_FORMAT_NV12}, // CRESTRON_CHANGE for x70
-  {COLOR_FormatYUV420PackedPlanar, GST_VIDEO_FORMAT_NV12}, // CRESTRON_CHANGE for 1080
-  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12} // CRESTRON_CHANGE for 1080
+  COLOR_ANDROID_Format_NV12, GST_VIDEO_FORMAT_NV12}, // omap
+  {COLOR_FormatYUV411Planar, GST_VIDEO_FORMAT_NV12}, // x60
+  {COLOR_QCOM_FormatYUV420SemiPlanar_X70, GST_VIDEO_FORMAT_NV12}, // x70
+  {COLOR_FormatYUV420PackedPlanar, GST_VIDEO_FORMAT_NV12}, // 1080
+  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12} // 1080
 };
 
 static gboolean
@@ -571,7 +572,7 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
   gint i;
 
   g_assert(codec_info);
-
+#if 0
   GST_INFO(
       "%s color_format 0x%08x (%s), codec supported_types %d",
       codec_info->name,
@@ -591,7 +592,7 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
               type->color_formats[k], type->n_color_formats);
       }
   }
-
+#endif
   if (color_format == COLOR_FormatYCbYCr) {
     if (strcmp (codec_info->name, "OMX.k3.video.decoder.avc") == 0) {
       GST_INFO
@@ -621,11 +622,12 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
       GST_INFO
           ("OMX.amlogic.video.encoder.avc: COLOR_FormatYUV420SemiPlanar is actually GST_VIDEO_FORMAT_NV21.");
       return GST_VIDEO_FORMAT_NV21;
-    }        
+    }
   }
 
   if (color_format == COLOR_FormatAndroidOpaque &&
-    strcmp (codec_info->name, "c2.rk.avc.decoder") == 0) {
+    (strcmp (codec_info->name, "c2.rk.avc.decoder") == 0
+    || strcmp (codec_info->name, "c2.rk.hevc.decoder") == 0)) {
       return GST_VIDEO_FORMAT_NV12;
   }
 
@@ -634,7 +636,7 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
       return color_format_mapping_table[i].video_format;
   }
 
-  GST_WARNING("color_format 0x%08x, not supported", color_format);
+  GST_WARNING("color_format %d(0x%x), not supported", color_format, color_format);
   return GST_VIDEO_FORMAT_UNKNOWN;
 }
 
@@ -667,7 +669,7 @@ gst_amc_video_format_to_color_format (const GstAmcCodecInfo * codec_info,
       GST_INFO
           ("OMX.amlogic.avc.decoder.awesome: GST_VIDEO_FORMAT_NV12 is reported as COLOR_FormatYUV420SemiPlanar.");
       return COLOR_FormatYUV420SemiPlanar;
-    }    
+    }
   }
 
   if (video_format == GST_VIDEO_FORMAT_NV21) {
@@ -730,12 +732,21 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
 {
   gint frame_size = 0;
 
+  GST_INFO(
+    "%s color_format %d(0x%x)"
+    " width %d, height %d"
+    " stride %d, slice_height %d"
+    " crop_left %d crop_right %d crop_top %d crop_bottom %d",
+    mime, color_format, color_format,
+    width, height,
+    stride, slice_height,
+    crop_left, crop_right, crop_top, crop_bottom);
+
   if (color_format == COLOR_FormatYCbYCr) {
     if (strcmp (codec_info->name, "OMX.k3.video.decoder.avc") == 0)
       color_format = COLOR_FormatYUV420SemiPlanar;
   }
-
-  // CRESTRON_CHANGE_BEGIN
+#if 0 // TODO: CHECK for TI HW first!
   if (color_format == COLOR_ANDROID_Format_NV12) {
       color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
   }
@@ -750,8 +761,7 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
     strcmp (codec_info->name, "c2.rk.avc.decoder") == 0) {
       color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
   }
-
-  // CRESTRON_CHANGE_END
+#endif
 
   /* Samsung Galaxy S3 seems to report wrong strides.
    * I.e. BigBuckBunny 854x480 H264 reports a stride of 864 when it is
@@ -821,13 +831,11 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
     case COLOR_QCOM_FormatYVU420SemiPlanar32m:
     case COLOR_QCOM_FormatYVU420SemiPlanar32mMultiView:
     case COLOR_FormatYUV420SemiPlanar:
-// CRESTRON_CHANGE_BEGIN
     case COLOR_QCOM_FormatYUV420SemiPlanar_X70:
     //for reference only since value is same as COLOR_QCOM_FormatYUV420SemiPlanar_X70
     //case COLOR_QCOM_FormatYUV420SemiPlanar_X80:
     case COLOR_FormatYUV420PackedPlanar:
     case COLOR_FormatYUV420PackedSemiPlanar:
-// CRESTRON_CHANGE_END
       {
       if (stride == 0 || slice_height == 0) {
         GST_ERROR ("Stride or slice height is 0");
@@ -845,8 +853,10 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
           tile_pos (tile_w, tile_h_luma, tile_w_align, tile_h_luma) * TILE_SIZE;
       break;
     }
+    case COLOR_FormatAndroidOpaque:
+      break;
     default:
-      GST_ERROR ("Unsupported color format 0x%08x", color_format);
+      GST_ERROR ("Unsupported color format %d(0x%x)", color_format, color_format);
       return FALSE;
       break;
   }
@@ -1991,6 +2001,7 @@ plugin_init (GstPlugin * plugin)
   gboolean init_ok = FALSE;
 
   GST_DEBUG_CATEGORY_INIT (gst_amc_debug, "amc", 0, "android-media-codec");
+  GST_DEBUG_CATEGORY_INIT (gst_amc_jni, "amc-jni", 0, "android-media-codec");
 
 #ifdef HAVE_JNI_H
   if (!gst_amc_jni_initialize ())
@@ -2495,21 +2506,21 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
               "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
 
           encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
-		  
-		  
-        } 
+
+
+        }
         // Crestron - added for amlogic mjpeg decoder
         //<MediaCodec name="OMX.amlogic.mjpeg.decoder.awesome" type="video/mjpeg" >
-        //    <Limit name="size" min="64x64" max="1920x1088" />                
-        //    <Limit name="alignment" value="2x2" />                          
+        //    <Limit name="size" min="64x64" max="1920x1088" />
+        //    <Limit name="alignment" value="2x2" />
         //    <Limit name="block-size" value="16x16" />
         //    <Limit name="blocks-per-second" min="1" max="972000" />
         //    <Limit name="bitrate" range="1-300000000" />
-        //    <Feature name="adaptive-playback" />                        
+        //    <Feature name="adaptive-playback" />
         //</MediaCodec>
         //
         // This is from jpegdec
-		///GstPipeline:pipeline0/GstJpegDec:jpegdec0.GstPad:sink: caps = 
+		///GstPipeline:pipeline0/GstJpegDec:jpegdec0.GstPad:sink: caps =
 		// image/jpeg, parsed=(boolean)true, format=(string)I420, interlaced=(boolean)false, width=(int)1920, height=(int)1080, framerate=(fraction)1/1
         //
         // Do we need a format here? Isn't jpeg enough?
@@ -2520,8 +2531,8 @@ gst_amc_codec_info_to_caps (const GstAmcCodecInfo * codec_info,
               "framerate", GST_TYPE_FRACTION_RANGE, 0, 1, G_MAXINT, 1,
               "parsed", G_TYPE_BOOLEAN, TRUE, NULL);
           encoded_ret = gst_caps_merge_structure (encoded_ret, tmp);
-		  //GST_ERROR("Crestron PEM video/mjpeg --> image/jpeg");				  
-        } 
+		  //GST_ERROR("Crestron PEM video/mjpeg --> image/jpeg");
+        }
         else {
 			GST_WARNING ("Unsupported mimetype '%s'", type->mime);
         }
