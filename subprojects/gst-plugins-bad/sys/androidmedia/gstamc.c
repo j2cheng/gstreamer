@@ -756,11 +756,6 @@ gst_amc_color_format_info_set (GstAmcColorFormatInfo * color_format_info,
   if (color_format == COLOR_FormatYUV411Planar) {
       color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
   }
-
-  if(color_format == COLOR_FormatAndroidOpaque &&
-    strcmp (codec_info->name, "c2.rk.avc.decoder") == 0) {
-      color_format = COLOR_TI_FormatYUV420PackedSemiPlanar;
-  }
 #endif
 
   /* Samsung Galaxy S3 seems to report wrong strides.
