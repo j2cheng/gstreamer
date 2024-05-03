@@ -5591,8 +5591,11 @@ gst_video_decoder_finish_and_remove_frame (GstVideoDecoder * decoder,
         GST_INFO_OBJECT (decoder, "got framListSize[%d],max_input_frames[%d]",framListSize,decoder->priv->dec_max_input_frames);
 
         //Note; dec_max_input_frames -- 0: disabled, 1: enabled
-        if((priv->processed-1 > 0) && (decoder->priv->dec_max_input_frames == 0) && (frame->decode_frame_number%framesDropInterval == 0) ||
-            (decoder->priv->dec_max_input_frames > 0)  && (framListSize > decoder->priv->dec_max_input_frames))
+        // if((priv->processed-1 > 0) && 
+        //    (decoder->priv->dec_max_input_frames == 0) && (frame->decode_frame_number%framesDropInterval == 0) ||
+        //    (decoder->priv->dec_max_input_frames > 0)  && (framListSize > decoder->priv->dec_max_input_frames)
+        //   )
+        if(0)
         {           
             ret = GST_FLOW_CUSTOM_ERROR_1;
             GST_FIXME_OBJECT (decoder, "Drop frame: state[%d] : frame id[%lu],processed[%d],max_input_frames[%d],frames_drop_interval[%d]",
