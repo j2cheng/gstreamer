@@ -529,7 +529,8 @@ static const struct
   {COLOR_FormatYUV411Planar, GST_VIDEO_FORMAT_NV12}, // x60
   {COLOR_QCOM_FormatYUV420SemiPlanar_X70, GST_VIDEO_FORMAT_NV12}, // x70
   {COLOR_FormatYUV420PackedPlanar, GST_VIDEO_FORMAT_NV12}, // 1080
-  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12} // 1080
+  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12}, // 1080
+  {COLOR_FormatAndroidOpaque, GST_VIDEO_FORMAT_NV12} // x80
 };
 
 static gboolean
@@ -631,9 +632,15 @@ gst_amc_color_format_to_video_format (const GstAmcCodecInfo * codec_info,
       return GST_VIDEO_FORMAT_NV12;
   }
 
+GST_ERROR ("JRC gst_amc_color_format_to_video_format color format 0x%x", color_format);
+
   for (i = 0; i < G_N_ELEMENTS (color_format_mapping_table); i++) {
     if (color_format_mapping_table[i].color_format == color_format)
-      return color_format_mapping_table[i].video_format;
+    {
+        GST_ERROR ("JRC gst_amc_color_format_to_video_format(23) return %d", color_format_mapping_table[i].video_format);
+
+        return color_format_mapping_table[i].video_format;
+    }
   }
 
   GST_WARNING("color_format %d(0x%x), not supported", color_format, color_format);
