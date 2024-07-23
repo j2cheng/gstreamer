@@ -529,7 +529,8 @@ static const struct
   {COLOR_FormatYUV411Planar, GST_VIDEO_FORMAT_NV12}, // x60
   {COLOR_QCOM_FormatYUV420SemiPlanar_X70, GST_VIDEO_FORMAT_NV12}, // x70
   {COLOR_FormatYUV420PackedPlanar, GST_VIDEO_FORMAT_NV12}, // 1080
-  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12} // 1080
+  {COLOR_FormatYUV420PackedSemiPlanar, GST_VIDEO_FORMAT_NV12}, // 1080
+  {COLOR_FormatAndroidOpaque, GST_VIDEO_FORMAT_NV12} // x80
 };
 
 static gboolean
