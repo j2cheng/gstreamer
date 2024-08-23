@@ -72,7 +72,7 @@ scan_codecs (GstPlugin * plugin)
   const GstStructure *cache_data;
   GError *error = NULL;
 
-  GST_ERROR ("Scanning codecs here, Crestron changes");//Crestron changes
+  GST_ERROR ("JRC Scanning codecs here, Crestron changes");//Crestron changes
 
   if ((cache_data = gst_plugin_get_cache_data (plugin))) {
     const GValue *arr = gst_structure_get_value (cache_data, "codecs");
