@@ -47,6 +47,7 @@ static struct
 
 gint ImageFormat_JPEG;
 gint ImageFormat_NV16;
+gint ImageFormat_NV12;//Crestron changes
 gint ImageFormat_NV21;
 gint ImageFormat_RGB_565;
 gint ImageFormat_UNKNOWN;
@@ -102,6 +103,7 @@ _init_classes (void)
           &android_graphics_imageformat.NV21))
     goto failed;
   ImageFormat_NV21 = android_graphics_imageformat.NV21;
+  GST_ERROR ("JRC _init_classes int of ImageFormat_NV21[%d]",ImageFormat_NV21);//Crestron changes
 
   fieldID = gst_amc_jni_get_static_field_id (env, &err, klass, "RGB_565", "I");
   if (err)
@@ -134,6 +136,9 @@ _init_classes (void)
           &android_graphics_imageformat.YV12))
     goto failed;
   ImageFormat_YV12 = android_graphics_imageformat.YV12;
+
+  ImageFormat_NV12 = 265;//android_graphics_imageformat.NV21;
+  GST_ERROR ("JRC _init_classes int of ImageFormat_NV21[%d]",ImageFormat_NV12);//Crestron changes
 
   return TRUE;
 

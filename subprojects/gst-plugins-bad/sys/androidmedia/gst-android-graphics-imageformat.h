@@ -32,6 +32,7 @@ G_BEGIN_DECLS
 /* android.graphics.ImageFormat */
 extern gint ImageFormat_JPEG;
 extern gint ImageFormat_NV16;
+extern gint ImageFormat_NV12;//Crestron changes
 extern gint ImageFormat_NV21;
 extern gint ImageFormat_RGB_565;
 extern gint ImageFormat_UNKNOWN;

@@ -1719,6 +1719,8 @@ gst_ahc_src_set_autofocus (GstPhotography * photo, gboolean on)
 static gint
 _compare_formats (int f1, int f2)
 {
+  GST_ERROR ("JRC _compare_formats f1[%d],f2[%d]",f1,f2);//Crestron changes
+  
   if (f1 == f2)
     return 0;
   /* YV12 has priority */
@@ -1785,11 +1787,21 @@ gst_ahc_src_getcaps (GstBaseSrc * src, GstCaps * filter)
         if (f == previous_format)
           continue;
 
+        GST_ERROR ("JRC gst_ahc_src_getcaps int of format[%d]",f);//Crestron changes
+
         /* Can't use switch/case because the values are not constants */
         if (f == ImageFormat_NV16) {
           GST_DEBUG_OBJECT (self, "    NV16 (%d)", f);
           format_string = g_strdup ("NV16");
-        } else if (f == ImageFormat_NV21) {
+        } 
+    //Crestron changes start
+        else if (f == ImageFormat_NV12) {
+          GST_DEBUG_OBJECT (self, "    NV12 (%d)", f);
+          format_string = g_strdup ("NV12");
+          GST_ERROR ("JRC gst_ahc_src_getcaps format_string[%s]",format_string);//Crestron changes
+        } 
+    //Crestron changes end        
+        else if (f == ImageFormat_NV21) {
           GST_DEBUG_OBJECT (self, "    NV21 (%d)", f);
           format_string = g_strdup ("NV21");
         } else if (f == ImageFormat_RGB_565) {
@@ -1916,6 +1928,9 @@ gst_ahc_src_setcaps (GstBaseSrc * src, GstCaps * caps)
 
     format_str = gst_structure_get_string (s, "format");
     format = gst_video_format_from_string (format_str);
+
+    GST_ERROR ("JRC gst_ahc_src_setcaps format_str[%s]",format_str);//Crestron changes
+    GST_ERROR ("JRC gst_ahc_src_setcaps format[%d]",format);//Crestron changes
 
     gst_structure_get_int (s, "width", &width);
     gst_structure_get_int (s, "height", &height);
