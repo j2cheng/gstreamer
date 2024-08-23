@@ -138,7 +138,7 @@ _init_classes (void)
   ImageFormat_YV12 = android_graphics_imageformat.YV12;
 
   ImageFormat_NV12 = 265;//android_graphics_imageformat.NV21;
-  GST_ERROR ("JRC _init_classes int of ImageFormat_NV21[%d]",ImageFormat_NV12);//Crestron changes
+  GST_ERROR ("JRC _init_classes int of ImageFormat_NV12[%d]",ImageFormat_NV12);//Crestron changes
 
   return TRUE;
 
