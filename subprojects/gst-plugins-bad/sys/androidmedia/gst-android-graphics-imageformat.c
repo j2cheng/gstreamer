@@ -42,6 +42,7 @@ static struct
   jint UNKNOWN;
   jint YUY2;
   jint YV12;
+  jint NV12;//Crestron Change
 } android_graphics_imageformat = {
 0};
 
@@ -137,7 +138,7 @@ _init_classes (void)
     goto failed;
   ImageFormat_YV12 = android_graphics_imageformat.YV12;
 
-  ImageFormat_NV12 = 265;//android_graphics_imageformat.NV21;
+  ImageFormat_NV12 = android_graphics_imageformat.NV12 = 265;//Crestron changes
   GST_ERROR ("JRC _init_classes int of ImageFormat_NV12[%d]",ImageFormat_NV12);//Crestron changes
 
   return TRUE;
@@ -182,6 +183,8 @@ gst_ag_imageformat_get_bits_per_pixel (gint format)
 
   jclass klass = android_graphics_imageformat.klass;
 
+  GST_ERROR ("JRC gst_ag_imageformat_get_bits_per_pixel format[%d]",format);//Crestron changes
+
   jint bpp = 0;
 
   env = gst_amc_jni_get_env ();
@@ -193,6 +196,8 @@ gst_ag_imageformat_get_bits_per_pixel (gint format)
         err->message);
     g_clear_error (&err);
   }
+
+  GST_ERROR ("JRC gst_ag_imageformat_get_bits_per_pixel bpp[%d]",bpp);//Crestron changes
 
   return bpp;
 }

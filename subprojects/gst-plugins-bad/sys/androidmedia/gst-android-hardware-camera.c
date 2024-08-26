@@ -2637,11 +2637,13 @@ gst_ah_camera_set_parameters (GstAHCamera * self, GstAHCParameters * params)
   gst_amc_jni_call_void_method (env, &err, self->object,
       android_hardware_camera.setParameters, params->object);
   if (err) {
-    GST_ERROR ("Failed to call android.hardware.Camera.setParameters: %s",
-        err->message);
+    GST_ERROR ("JRC Failed to call android.hardware.Camera.setParameters: %s",
+        err->message);//Crestron changes
     g_clear_error (&err);
     return FALSE;
   }
+
+  GST_ERROR ("JRC gst_ah_camera_set_parameters return true");//Crestron changes
 
   return TRUE;
 }
@@ -4477,12 +4479,14 @@ gst_ahc_parameters_set_preview_format (GstAHCParameters * self, gint format)
   JNIEnv *env = gst_amc_jni_get_env ();
   GError *err = NULL;
 
+GST_ERROR ("JRC gst_ahc_parameters_set_preview_format calling setPreviewFormat format[%d]",format);//Crestron changes
+
   gst_amc_jni_call_void_method (env, &err, self->object,
       android_hardware_camera_parameters.setPreviewFormat, format);
   if (err) {
     GST_ERROR
-        ("Failed to call android.hardware.Camera.Parameters.setPreviewFormat: %s",
-        err->message);
+        ("JRC Failed to call android.hardware.Camera.Parameters.setPreviewFormat: %s",
+        err->message);//Crestron changes
     g_clear_error (&err);
     return FALSE;
   }

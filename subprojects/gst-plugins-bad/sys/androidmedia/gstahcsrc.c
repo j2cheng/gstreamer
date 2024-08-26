@@ -1936,6 +1936,11 @@ gst_ahc_src_setcaps (GstBaseSrc * src, GstCaps * caps)
     gst_structure_get_int (s, "height", &height);
     gst_structure_get_fraction (s, "framerate", &fps_n, &fps_d);
 
+GST_ERROR ("JRC gst_ahc_src_setcaps width[%d]",width);//Crestron changes
+GST_ERROR ("JRC gst_ahc_src_setcaps height[%d]",height);//Crestron changes
+GST_ERROR ("JRC gst_ahc_src_setcaps fps_n[%d]",fps_n);//Crestron changes
+GST_ERROR ("JRC gst_ahc_src_setcaps fps_d[%d]",fps_d);//Crestron changes
+
     fps_n *= 1000 / fps_d;
 
     /* Select the best range that contains our framerate.
@@ -1970,6 +1975,11 @@ gst_ahc_src_setcaps (GstBaseSrc * src, GstCaps * caps)
         break;
       case GST_VIDEO_FORMAT_NV21:
         fmt = ImageFormat_NV21;
+        break;
+      case GST_VIDEO_FORMAT_NV12:
+        fmt = ImageFormat_NV12;
+        GST_ERROR ("JRC gst_ahc_src_setcaps fmt[%d]",fmt);//Crestron changes
+
         break;
       case GST_VIDEO_FORMAT_YUY2:
         fmt = ImageFormat_YUY2;
@@ -2007,8 +2017,19 @@ gst_ahc_src_setcaps (GstBaseSrc * src, GstCaps * caps)
     self->width = width;
     self->height = height;
     self->format = fmt;
+
+    GST_ERROR ("JRC calling gst_ag_imageformat_get_bits_per_pixel fmt[%d]",fmt);//Crestron changes
     buffer_size = width * height *
         ((double) gst_ag_imageformat_get_bits_per_pixel (fmt) / 8);
+    GST_ERROR ("JRC calling gst_ag_imageformat_get_bits_per_pixel buffer_size[%d]",buffer_size);//Crestron changes
+
+//TODO: fix me!!! Crestron
+    GST_ERROR ("JRC calling gst_ag_imageformat_get_bits_per_pixel using NV21 fmt[17]");//Crestron changes
+    buffer_size = width * height *
+        ((double) gst_ag_imageformat_get_bits_per_pixel (17) / 8);//Crestron changes
+    GST_ERROR ("JRC calling gst_ag_imageformat_get_bits_per_pixel buffer_size[%d],self->buffer_size[%d]",
+                buffer_size,self->buffer_size);//Crestron changes
+
 
     if (buffer_size > self->buffer_size) {
       JNIEnv *env = gst_amc_jni_get_env ();
@@ -2025,8 +2046,8 @@ gst_ahc_src_setcaps (GstBaseSrc * src, GstCaps * caps)
     }
     self->buffer_size = buffer_size;
 
-    GST_DEBUG_OBJECT (self, "setting buffer w:%d h:%d buffer_size: %d",
-        self->width, self->height, self->buffer_size);
+    GST_DEBUG_OBJECT (self, "JRC setting buffer w:%d h:%d buffer_size: %d",
+        self->width, self->height, self->buffer_size);//Crestron changes
 
     ret = TRUE;
   }
